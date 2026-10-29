@@ -30,66 +30,97 @@ Login -> Dashboard (indicadores) -> Lista (busca, filtros, ordenação, destaque
 Proprietário (admin) também gerencia usuários autorizados e regras de complementos.
 
 ## 4. Telas
-Públicas: `/` (início + assistente em etapas), `/confirmacao/$protocolo`, `/privacidade`.
-Admin: `/entrar`, `/painel` (dashboard), `/painel/pedidos`, `/painel/pedidos/$id`, `/painel/regras`, `/painel/usuarios` (somente admin).
+Públicas: `/` (início + assistente em etapas), `/confirmacao` (sem identificador na URL), `/privacidade`.
+Admin: `/entrar`, `/painel` (dashboard), `/painel/pedidos`, `/painel/pedidos/$id`, `/painel/regras`, `/painel/configuracoes` (limites de IA), `/painel/usuarios` (P1).
 
 ## 5. Banco de dados mínimo (Lovable Cloud)
 - `stores` — loja piloto (nome, WhatsApp).
 - `user_roles` — papéis `admin` e `seller` (tabela separada, função de verificação segura).
-- `quote_requests` — protocolo, nome, WhatsApp, observações, consentimento + data, texto original, interpretação da IA (JSON), perguntas/respostas (JSON), categoria, status, `needs_followup_at`, `last_followup_at`, notas internas, flag `ai_failed`.
+- `quote_requests` — protocolo, nome, WhatsApp, observações, consentimento + data, texto original, interpretação da IA (JSON), perguntas/respostas (JSON), categoria, status, `needs_followup_at`, `last_followup_at`, notas internas, flag `ai_failed`, flag `is_test`.
 - `request_items` — itens (origem: `original` | `complement`), nome, quantidade informada, observação.
 - `suggested_complements` — o que a IA sugeriu e se foi aceito (para métrica e auditoria).
-- `association_rules` — categoria, atividade/produto gatilho, complemento, condição, pergunta de esclarecimento, explicação, `reviewed`, `active`.
+- `association_rules` — categoria, atividade/produto gatilho, complemento, condição, pergunta de esclarecimento, explicação, `reviewed`, `reviewed_by`, `reviewed_at`, `active`.
 - `status_history` — status anterior/novo, quem alterou, quando, observação.
 - `followups` — registros de acompanhamento do vendedor.
+- `ai_usage` — registro de cada chamada de IA (data, tipo, sucesso, identificador anônimo de origem), sem texto do cliente nem dados pessoais.
+- `app_settings` — limites configuráveis de IA (diário global, por origem/hora, por pedido).
 
-Regras-semente para as 3 categorias (pisos, sanitários, pintura) inseridas na migração. Dados fictícios de teste também via migração, marcados como fictícios.
+### Regras iniciais (revisão humana obrigatória)
+Regras-semente das 3 categorias entram na migração como **rascunho**: `reviewed = false`, `active = false`. Só ficam visíveis para clientes depois que um administrador as revisa e ativa no painel (registrando quem e quando). Sem regras revisadas aplicáveis, o cliente prossegue normalmente sem sugestões.
+
+### Dados de teste
+Pedidos fictícios ficam marcados com `is_test = true`, exibem um selo "TESTE" no painel e são **excluídos de todos os indicadores** e da lista padrão (filtro opcional "mostrar testes"). Nomes e telefones fictícios são obviamente falsos (ex.: "Cliente Teste 01", número inválido). Antes de divulgar o link, um botão de admin remove todos os dados de teste.
 
 ## 6. Estratégia de IA
 - Modelo padrão do Lovable AI Gateway, chamado apenas no servidor.
 - **Chamada 1 — Interpretar:** retorna JSON estruturado: produtos, quantidades, atividade, categoria (pisos/sanitários/pintura/outro), informações ausentes, até 3 perguntas.
-- **Chamada 2 — Sugerir:** recebe pedido + respostas + **somente as regras ativas e revisadas da categoria**; escolhe no máximo 5, com explicação. A IA seleciona a partir da base, não inventa itens soltos.
-- Prompt de sistema proíbe preço, estoque, garantia de compatibilidade, quantidades técnicas, itens "obrigatórios" e orientação estrutural/elétrica. Texto do cliente vai delimitado como dado não confiável.
-- Validação no servidor do JSON retornado (esquema), cortes de tamanho, limite de 5 sugestões.
-- Custo: 2 chamadas por pedido, nunca por tecla; resultado guardado no estado da sessão para não repetir ao voltar.
-- Fallback: falha/timeout -> fluxo segue sem IA, pedido salvo com `ai_failed`.
+- **Chamada 2 — Sugerir:** recebe pedido + respostas + **somente as regras ativas e revisadas da categoria**; escolhe no máximo 5, com explicação. Só são aceitos IDs de regras existentes; a IA não inventa itens. Sem regras aplicáveis, a chamada 2 nem é feita.
+- **Dados enviados à IA:** apenas o texto do pedido e as respostas de esclarecimento. A IA é chamada **antes** do formulário de contato, então nome e telefone nunca são enviados. Padrões que pareçam telefone/e-mail no texto são mascarados antes do envio.
+- **Proteção contra instruções embutidas:** instruções fixas no papel de sistema; texto do cliente vai delimitado e rotulado como dado não confiável; a saída é validada por esquema rígido (campos, tamanhos, IDs de regras permitidos) e qualquer coisa fora disso é descartada. O cliente não consegue mudar o comportamento, porque a IA só pode devolver o formato esperado.
+- Prompt de sistema proíbe preço, estoque, garantia de compatibilidade, quantidades técnicas, itens "obrigatórios" e orientação estrutural/elétrica.
+- Fallback: falha, timeout ou limite atingido -> fluxo segue sem IA, pedido salvo com `ai_failed`.
+
+### Volume e custo estimados
+- Base: 25 pedidos/dia x 2 análises = **~50 chamadas/dia, ~1.500/mês**. Somando abandonos e reanálises, considerar até ~100/dia.
+- O custo real por chamada depende do tamanho do texto e do modelo, então **não prometemos custo baixo**: ele será medido nas primeiras semanas.
+- **Monitoramento:** contagem diária no painel (a partir de `ai_usage`), mais o histórico de uso e créditos do Lovable AI no workspace. Revisão semanal no piloto.
+
+### Limites configuráveis (editáveis pelo admin)
+- Por origem anônima (hash de IP + sessão): ex. 6 análises/hora e 20/dia. Cobre clientes legítimos que refazem um pedido.
+- Por pedido: no máximo 2 interpretações + 2 sugestões (reanalisar após edição conta).
+- Teto diário global: ex. 300 chamadas. Ao ser atingido, a IA é pausada até o dia seguinte e os clientes seguem pelo fluxo sem IA (nunca são bloqueados de enviar o pedido).
+- Texto do pedido limitado (ex.: 1.500 caracteres); honeypot e intervalo mínimo entre envios.
 
 ## 7. Base de associações
-Tela `/painel/regras`: listar, criar, editar, ativar/desativar e marcar como revisada. Só regras ativas e revisadas alimentam a IA. Cartões ao cliente sempre trazem "Sugestão — a loja confirmará a compatibilidade". Nenhuma afirmação de que a loja vende o item.
+Tela `/painel/regras`: listar, criar, editar, revisar, ativar/desativar. Uma regra só pode ser ativada depois de marcada como revisada por um administrador. Cartões ao cliente sempre trazem "Sugestão — a loja confirmará a compatibilidade". Nenhuma afirmação de que a loja vende o item.
 
 ## 8. Segurança
 - RLS em todas as tabelas: público **não lê nada**; inserção pública só via função de servidor validada (não direto na tabela).
-- Leitura/edição de pedidos apenas para `seller`/`admin`; regras e usuários apenas `admin`.
+- Leitura/edição de pedidos apenas para `seller`/`admin`; regras, limites e usuários apenas `admin`.
 - Validação de entradas no servidor (tamanhos, formato de WhatsApp BR, consentimento obrigatório).
-- Antiabuso: limite por IP/telefone (ex.: 5 envios/hora e limite de chamadas de IA), campo honeypot.
-- Cadastro público desativado; o primeiro admin é criado manualmente por você (convite), sem admin automático.
-- Chaves só no servidor; nenhum segredo no código.
+- **Confirmação do protocolo:** o protocolo exibido é aleatório e não sequencial (ex.: `OO-7KQ4-M2XD`). A tela `/confirmacao` mostra apenas o que a própria sessão do navegador acabou de enviar (mantido em memória/armazenamento da sessão), sem consultar o banco e sem dados pessoais. Não existe rota pública para consultar pedido por protocolo, então não há enumeração.
+- Antiabuso: limites da seção 6, honeypot, intervalo mínimo entre envios.
+- Cadastro público desativado. Chaves só no servidor; nenhum segredo no código.
+
+### Primeiro administrador (sem cadastro público)
+1. O cadastro aberto fica desativado nas configurações de autenticação.
+2. Você me informa o e-mail da proprietária. Eu crio esse usuário pelo Lovable Cloud (convite/link para definir senha) e insiro o papel `admin` em `user_roles` por migração/comando de servidor, nunca pelo app.
+3. `user_roles` não aceita inserção/alteração por nenhum usuário pelo app (sem política de escrita no MVP); ninguém consegue se promover.
+4. Vendedores adicionais no P0: criados da mesma forma, sob pedido. Tela de convite pelo painel fica no P1.
 
 ## 9. Custos e dependências
-- Lovable Cloud (banco, autenticação) — uso dentro do plano.
-- Lovable AI — consumo por pedido (~2 chamadas). Com ~25 pedidos/dia, custo baixo; monitorável.
+- Lovable Cloud (banco, autenticação): consumo conforme uso.
+- Lovable AI: consumo por chamada, estimado na seção 6 e medido no piloto; protegido por limites.
 - Sem serviços externos, sem API do WhatsApp, sem ERP.
 
-## 10. Ordem de construção
-1. Identidade visual (cores informadas, tipografia, componentes base) e ativação do Lovable Cloud.
-2. Banco, papéis, RLS, regras-semente e dados fictícios.
-3. Fluxo do cliente sem IA (pedido -> resumo -> contato -> protocolo) — garante o fallback.
-4. Integração de IA (interpretar + sugerir) com validação e limites.
-5. Login e painel: lista, detalhe, status, histórico, acompanhamento, WhatsApp.
-6. Dashboard com indicadores reais.
-7. Tela de regras e gestão de usuários.
-8. Testes dos 15 critérios (incluindo acesso não autorizado, celular e falha de IA), varredura de segurança e publicação.
+## 10. Prioridades e ordem de construção
+
+### P0 — essencial para o piloto
+1. Identidade visual e ativação do Lovable Cloud.
+2. Banco, papéis, RLS, regras-semente em rascunho, dados de teste marcados.
+3. Fluxo do cliente sem IA (pedido -> resumo -> contato -> confirmação) — garante o fallback.
+4. IA (interpretar + sugerir) com validação, limites e registro de uso.
+5. Complementos opcionais (desmarcados por padrão).
+6. Primeiro admin seguro e login.
+7. Painel: lista, detalhe, status com histórico, acompanhamento, WhatsApp.
+8. Revisão/ativação das regras e ajuste dos limites de IA.
+9. Dashboard básico (contagens por status, excluindo testes) e contagem de uso de IA.
+10. Página de privacidade e consentimento.
+11. Testes de segurança (acesso não autorizado, enumeração, abuso, falha da IA, celular) e publicação.
+
+### P1 — depois do piloto
+Gestão de usuários pelo painel (convites, remoção), métricas adicionais (taxa de aceite de complementos, tempo de resposta, conversão), filtros e exportações avançadas, melhorias administrativas.
 
 ## 11. O que permanece manual
-Consulta de preço e estoque no Gdoor, envio do orçamento pelo WhatsApp (vendedor confirma e envia), registro da venda e emissão fiscal no sistema da loja, convite de novos usuários, revisão das regras.
+Consulta de preço e estoque no Gdoor, envio do orçamento pelo WhatsApp (vendedor confirma e envia), registro da venda e emissão fiscal no sistema da loja, criação de usuários no P0, revisão das regras.
 
 ## 12. Riscos e simplificações
-- **IA sugerir algo inadequado:** mitigado por restringir à base revisada e limitar a 5.
-- **Abuso do formulário público / custo de IA:** limites por IP/telefone e honeypot.
-- **Base de regras pequena:** começamos com ~10 regras por categoria; a loja amplia pelo painel.
+- **IA sugerir algo inadequado:** restrita a regras revisadas, máximo de 5.
+- **Abuso / gasto inesperado:** limites por origem, por pedido e teto diário, com fallback sem IA.
+- **Nenhuma regra revisada no lançamento:** o app funciona sem sugestões; a loja precisa revisar as regras antes de divulgar.
 - **Adoção pelos clientes:** depende de divulgar o link no WhatsApp da loja.
 - **LGPD:** consentimento explícito e página de privacidade simples; texto jurídico final deve ser revisado pela loja.
-- Simplificação proposta: perguntas de esclarecimento como texto curto ou opções sugeridas pela IA (sem formulários dinâmicos complexos).
+- Simplificação: perguntas de esclarecimento como texto curto ou opções sugeridas pela IA.
 
 ## Detalhes técnicos
-TanStack Start + server functions (`createServerFn`) para IA e envio público; middleware de autenticação nas funções do painel; `@lovable.dev/ai-gateway` com tipos gerados; papéis via `has_role()` security definer; testes unitários para regras críticas (limite de 5 sugestões, consentimento obrigatório, transições de status, validação de WhatsApp).
+TanStack Start + server functions (`createServerFn`) para IA e envio público; middleware de autenticação nas funções do painel; `@lovable.dev/ai-gateway` com tipos gerados; papéis via `has_role()` security definer; limites contados em `ai_usage` no banco (não em memória). Testes unitários para regras críticas: limite de 5 sugestões, consentimento obrigatório, transições de status, validação de WhatsApp, limites de IA, exclusão de testes dos indicadores, regra não revisada nunca enviada à IA, mascaramento de contato no texto.
