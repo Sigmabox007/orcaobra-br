@@ -117,7 +117,7 @@ export const submitRequest = createServerFn({ method: "POST" })
       const { data: row, error } = await supabaseAdmin
         .from("quote_requests")
         .insert({
-          store_id: store?.id,
+          store_id: store?.id ?? null,
           protocol,
           customer_name: data.name,
           customer_whatsapp: phone,

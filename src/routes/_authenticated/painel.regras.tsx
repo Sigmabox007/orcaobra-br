@@ -31,15 +31,15 @@ function Regras() {
   if (!isAdmin) return <p>Apenas administradores.</p>;
   const refresh = () => qc.invalidateQueries({ queryKey: ["rules"] });
 
-  async function update(id: string, patch: Record<string, unknown>) {
+  async function update(id: string, patch: { active?: boolean; reviewed?: boolean; reviewed_by?: string | null; reviewed_at?: string | null }) {
     const { error } = await supabase.from("association_rules").update(patch).eq("id", id);
     if (error) toast.error(error.message.includes("revisada") ? "Revise a regra antes de ativar." : "Não foi possível salvar.");
     refresh();
   }
   async function create() {
-    if (!form.trigger || !form.complement || !form.explanation) return toast.error("Preencha gatilho, complemento e explicação.");
+    if (!form.trigger || !form.complement || !form.explanation) return void toast.error("Preencha gatilho, complemento e explicação.");
     const { error } = await supabase.from("association_rules").insert({ ...form, condition: form.condition || null, clarifying_question: form.clarifying_question || null });
-    if (error) return toast.error("Não foi possível criar.");
+    if (error) return void toast.error("Não foi possível criar.");
     setForm(empty);
     refresh();
   }

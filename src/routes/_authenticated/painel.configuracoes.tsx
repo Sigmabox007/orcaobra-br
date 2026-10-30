@@ -33,25 +33,25 @@ function Config() {
     queryFn: async () => (await supabase.from("quote_requests").select("id", { count: "exact", head: true }).eq("is_test", true)).count ?? 0,
   });
   const [form, setForm] = useState<Record<string, number | boolean>>({});
-  useEffect(() => { if (data) setForm(data); }, [data]);
+  useEffect(() => { if (data) { const { updated_at: _u, ...rest } = data; setForm(rest); } }, [data]);
   if (!isAdmin) return <p>Apenas administradores.</p>;
 
   async function save() {
-    const patch: Record<string, number | boolean> = { ai_enabled: !!form.ai_enabled };
+    const patch: Record<string, number | boolean> = { ai_enabled: !!form["ai_enabled"] };
     for (const [k] of FIELDS) {
       const v = Number(form[k]);
-      if (!Number.isInteger(v) || v < 0 || v > 100000) return toast.error("Use números inteiros válidos.");
+      if (!Number.isInteger(v) || v < 0 || v > 100000) return void toast.error("Use números inteiros válidos.");
       patch[k] = v;
     }
     const { error } = await supabase.from("app_settings").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", 1);
-    if (error) return toast.error("Não foi possível salvar.");
+    if (error) return void toast.error("Não foi possível salvar.");
     toast.success("Limites salvos.");
     qc.invalidateQueries({ queryKey: ["settings"] });
   }
   async function deleteTests() {
     if (!confirm("Excluir todos os pedidos de teste? Essa ação não pode ser desfeita.")) return;
     const { error } = await supabase.from("quote_requests").delete().eq("is_test", true);
-    if (error) return toast.error("Não foi possível excluir.");
+    if (error) return void toast.error("Não foi possível excluir.");
     toast.success("Pedidos de teste excluídos.");
     qc.invalidateQueries();
   }
@@ -63,7 +63,7 @@ function Config() {
         <h2 className="font-semibold">Limites da inteligência artificial</h2>
         <p className="text-xs text-muted-foreground">Quando um limite é atingido, o cliente continua e envia o pedido normalmente, só que sem a ajuda da IA.</p>
         <label className="flex items-center gap-2 text-sm">
-          <Switch checked={!!form.ai_enabled} onCheckedChange={(v) => setForm({ ...form, ai_enabled: v })} /> Assistente de IA ligado
+          <Switch checked={!!form["ai_enabled"]} onCheckedChange={(v) => setForm({ ...form, ai_enabled: v })} /> Assistente de IA ligado
         </label>
         {FIELDS.map(([k, label]) => (
           <div key={k} className="space-y-1">

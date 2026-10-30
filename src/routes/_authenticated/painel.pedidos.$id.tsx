@@ -63,9 +63,9 @@ function Detalhe() {
   };
 
   async function saveStatus() {
-    if (newStatus === r.status) return toast.info("Status não mudou.");
+    if (newStatus === r.status) return void toast.info("Status não mudou.");
     const { error } = await supabase.from("quote_requests").update({ status: newStatus, updated_at: new Date().toISOString() }).eq("id", id);
-    if (error) return toast.error("Não foi possível salvar.");
+    if (error) return void toast.error("Não foi possível salvar.");
     await supabase.from("status_history").insert({ request_id: id, from_status: r.status, to_status: newStatus, changed_by: user.id, note: statusNote || null });
     setStatusNote("");
     toast.success("Status atualizado.");
@@ -76,13 +76,13 @@ function Detalhe() {
       .from("quote_requests")
       .update({ internal_notes: notes || null, needs_followup_at: followDate ? new Date(`${followDate}T09:00:00`).toISOString() : null })
       .eq("id", id);
-    if (error) return toast.error("Não foi possível salvar.");
+    if (error) return void toast.error("Não foi possível salvar.");
     toast.success("Informações salvas.");
     refresh();
   }
   async function addFollowup() {
     const { error } = await supabase.from("followups").insert({ request_id: id, user_id: user.id, note: followNote || null });
-    if (error) return toast.error("Não foi possível registrar.");
+    if (error) return void toast.error("Não foi possível registrar.");
     await supabase.from("quote_requests").update({ last_followup_at: new Date().toISOString() }).eq("id", id);
     setFollowNote("");
     toast.success("Acompanhamento registrado.");
