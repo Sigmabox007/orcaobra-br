@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { StatusBadge, TestBadge } from "@/components/orcaobra/status-badge";
-import { CATEGORY_LABEL, STATUSES, STATUS_LABEL, whatsappLink, type Status } from "@/lib/orcaobra/rules";
+import { CATEGORY_LABEL, STATUSES, STATUS_LABEL, whatsappLink, requestedProducts, pendingClarifications, type Status } from "@/lib/orcaobra/rules";
 
 export const Route = createFileRoute("/_authenticated/painel/pedidos/$id")({
   head: () => ({ meta: [{ title: "Pedido — OrçaObra" }, { name: "robots", content: "noindex" }] }),
@@ -19,7 +20,7 @@ const fmt = (d: string) => new Date(d).toLocaleString("pt-BR", { dateStyle: "sho
 
 function Detalhe() {
   const { id } = Route.useParams();
-  const { user } = Route.useRouteContext();
+  const { user, isAdmin } = Route.useRouteContext();
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["request", id],
@@ -42,6 +43,7 @@ function Detalhe() {
   const [followNote, setFollowNote] = useState("");
   const [followDate, setFollowDate] = useState("");
   const [msg, setMsg] = useState("");
+  const [savingTest, setSavingTest] = useState(false);
 
   useEffect(() => {
     if (!data) return;
@@ -56,6 +58,8 @@ function Detalhe() {
   const { r, items, sugg, hist, fu } = data;
   const interp = r.ai_interpretation as { activity?: string; missing_info?: string[] } | null;
   const clar = (r.clarifications as { question: string; answer: string }[]) ?? [];
+  const products = [...requestedProducts(items.filter((i) => i.origin !== "complement"), r.original_text, interp?.activity), ...items.filter((i) => i.origin === "complement")];
+  const pending = pendingClarifications(clar);
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["request", id] });
     qc.invalidateQueries({ queryKey: ["requests"] });
@@ -69,6 +73,15 @@ function Detalhe() {
     await supabase.from("status_history").insert({ request_id: id, from_status: r.status, to_status: newStatus, changed_by: user.id, note: statusNote || null });
     setStatusNote("");
     toast.success("Status atualizado.");
+    refresh();
+  }
+  async function setTest(value: boolean) {
+    if (!isAdmin || savingTest) return;
+    setSavingTest(true);
+    const { error } = await supabase.from("quote_requests").update({ is_test: value, updated_at: new Date().toISOString() }).eq("id", id);
+    setSavingTest(false);
+    if (error) return void toast.error("Não foi possível alterar a classificação.");
+    toast.success(value ? "Pedido marcado como teste." : "Classificação de teste removida.");
     refresh();
   }
   async function saveNotes() {
@@ -107,8 +120,9 @@ function Detalhe() {
             <p className="mt-2 text-xs text-muted-foreground">Recebido em {fmt(r.created_at)}{r.category ? ` · ${CATEGORY_LABEL[r.category] ?? r.category}` : ""}</p>
           </Card>
           <Card title="Itens do pedido">
+            {products.length === 0 && <p className="text-sm text-muted-foreground">Nenhum produto específico informado.</p>}
             <ul className="divide-y divide-border text-sm">
-              {items.map((i) => (
+              {products.map((i) => (
                 <li key={i.id} className="flex justify-between gap-2 py-2">
                   <span>{i.name}{i.origin === "complement" && <span className="ml-2 rounded bg-accent px-1.5 text-[10px] font-semibold uppercase text-accent-foreground">complemento aceito</span>}</span>
                   <span className="text-muted-foreground">{i.quantity ?? ""}</span>
@@ -118,13 +132,14 @@ function Detalhe() {
           </Card>
           {(interp || clar.length > 0) && (
             <Card title="Interpretação da IA">
-              {interp?.activity && <p className="text-sm"><strong>Atividade:</strong> {interp.activity}</p>}
+              {interp?.activity && <p className="text-sm"><strong>Serviço ou necessidade:</strong> {interp.activity}</p>}
               {interp?.missing_info && interp.missing_info.length > 0 && (
-                <p className="mt-1 text-sm"><strong>Informações ausentes:</strong> {interp.missing_info.join("; ")}</p>
+                <p className="mt-1 text-sm"><strong>Informações inicialmente identificadas pela IA:</strong> {interp.missing_info.join("; ")}</p>
               )}
               {clar.length > 0 && (
-                <dl className="mt-2 space-y-1 text-sm">{clar.map((c, i) => <div key={i}><dt className="text-muted-foreground">{c.question}</dt><dd>{c.answer}</dd></div>)}</dl>
+                <><h3 className="mt-3 text-sm font-semibold">Perguntas e respostas</h3><dl className="mt-2 space-y-1 text-sm">{clar.map((c, i) => <div key={i}><dt className="text-muted-foreground">{c.question}</dt><dd>{c.answer.trim() || "Sem resposta"}</dd></div>)}</dl></>
               )}
+              {pending.length > 0 && <p className="mt-2 text-sm"><strong>Perguntas sem resposta:</strong> {pending.map((c) => c.question).join("; ")}</p>}
             </Card>
           )}
           {sugg.length > 0 && (
@@ -138,6 +153,7 @@ function Detalhe() {
         </div>
 
         <div className="space-y-5">
+          {isAdmin && <Card title="Classificação do pedido"><label className="flex items-center gap-3 text-sm"><Switch aria-label="Marcar como teste" checked={r.is_test} disabled={savingTest} onCheckedChange={setTest} />Marcar como teste</label></Card>}
           <Card title="Contato">
             <p className="text-sm">WhatsApp: <span className="font-mono">{r.customer_whatsapp}</span></p>
             <Label htmlFor="wmsg" className="mt-3 block text-xs">Mensagem (você confirma antes de enviar)</Label>

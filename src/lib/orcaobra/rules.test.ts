@@ -7,10 +7,33 @@ import {
   maskContacts,
   normalizeWhatsapp,
   sanitizeSuggestions,
+  requestedProducts,
+  pendingClarifications,
+  buildRequestItems,
 } from "./rules";
 
 const limits = { ai_enabled: true, ai_daily_global_limit: 300, ai_per_origin_hour: 6, ai_per_origin_day: 20, ai_per_session: 4 };
 const zero = { globalToday: 0, originHour: 0, originDay: 0, session: 0 };
+
+describe("correções finais", () => {
+  const service = "Quero pintar as paredes de um quarto que já está pintado. Preciso saber quais materiais comprar.";
+  it("não transforma a descrição de serviço em produto", () => {
+    expect(requestedProducts([{ name: service, quantity: "" }], service)).toEqual([]);
+    expect(buildRequestItems([], [])).toEqual([]);
+  });
+  it("preserva produtos e quantidades solicitados", () => {
+    expect(requestedProducts([{ name: "tinta", quantity: "2 latas" }], "Quero pintar o quarto e preciso de 2 latas de tinta")).toEqual([{ name: "tinta", quantity: "2 latas" }]);
+  });
+  it("conta apenas produtos e complementos aceitos", () => {
+    expect(buildRequestItems([{ name: "tinta", quantity: "2 latas" }], [{ name: "fita crepe", accepted: true }, { name: "lona plástica", accepted: false }])).toEqual([{ origin: "original", name: "tinta", quantity: "2 latas" }, { origin: "complement", name: "fita crepe", quantity: null }]);
+  });
+  it("três respostas não permanecem pendentes", () => {
+    expect(pendingClarifications([{ question: "Área?", answer: "20 m²" }, { question: "Cor?", answer: "Branco" }, { question: "Estado?", answer: "Já pintado" }])).toEqual([]);
+  });
+  it("somente pergunta não respondida fica pendente", () => {
+    expect(pendingClarifications([{ question: "Área?", answer: " " }, { question: "Cor?", answer: "Branco" }])).toEqual([{ question: "Área?", answer: " " }]);
+  });
+});
 
 describe("sugestões", () => {
   const allowed = Array.from({ length: 8 }, (_, i) => ({ id: `r${i}`, complement: `Item ${i}`, explanation: "x" }));
