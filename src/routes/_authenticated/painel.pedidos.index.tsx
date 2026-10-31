@@ -8,7 +8,7 @@ import { StatusBadge, TestBadge } from "@/components/orcaobra/status-badge";
 import { CATEGORY_LABEL, STATUSES, STATUS_LABEL, type Status } from "@/lib/orcaobra/rules";
 
 export const Route = createFileRoute("/_authenticated/painel/pedidos/")({
-  head: () => ({ meta: [{ title: "Pedidos — OrçaObra" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({ meta: [{ title: "Pedidos — OrçaObra" }, { name: "description", content: "Lista de pedidos de orçamento da loja no OrçaObra." }, { property: "og:title", content: "Pedidos — OrçaObra" }, { property: "og:description", content: "Lista de pedidos de orçamento da loja no OrçaObra." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }, { name: "robots", content: "noindex" }] }),
   component: Pedidos,
 });
 

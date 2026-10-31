@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { computeIndicators, type Status } from "@/lib/orcaobra/rules";
 
 export const Route = createFileRoute("/_authenticated/painel/")({
-  head: () => ({ meta: [{ title: "Painel — OrçaObra" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({ meta: [{ title: "Painel — OrçaObra" }, { name: "description", content: "Indicadores de pedidos reais da loja no OrçaObra." }, { property: "og:title", content: "Painel — OrçaObra" }, { property: "og:description", content: "Indicadores de pedidos reais da loja no OrçaObra." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }, { name: "robots", content: "noindex" }] }),
   component: Dashboard,
 });
 

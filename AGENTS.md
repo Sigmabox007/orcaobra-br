@@ -14,3 +14,5 @@
 - Admin pages read/write via the browser client under RLS (`is_staff`/`has_role`); roles live only in `user_roles`, written never by the app. Why: no self-promotion.
 - Pure business rules (limits, suggestion cap, masking, indicators) live in `src/lib/orcaobra/rules.ts` with tests beside it. Why: one tested source of truth.
 - AI receives only order text/answers (contacts masked) and may only pick reviewed+active rule ids. Why: privacy and no invented products.
+- Database triggers guard test classification changes and invalidate reviewed rule content on edits. Why: browser controls cannot enforce authorization or approval invariants.
+- Requested products and service descriptions are distinct; stored clarifications are the source for unanswered questions. Why: avoid invented line items and redundant AI calls.

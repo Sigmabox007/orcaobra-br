@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { CATEGORY_LABEL } from "@/lib/orcaobra/rules";
 
 export const Route = createFileRoute("/_authenticated/painel/regras")({
-  head: () => ({ meta: [{ title: "Complementos — OrçaObra" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({ meta: [{ title: "Complementos — OrçaObra" }, { name: "description", content: "Revisão de regras de complementos do OrçaObra." }, { property: "og:title", content: "Complementos — OrçaObra" }, { property: "og:description", content: "Revisão de regras de complementos do OrçaObra." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }, { name: "robots", content: "noindex" }] }),
   component: Regras,
 });
 
@@ -20,6 +20,8 @@ function Regras() {
   const { user, isAdmin } = Route.useRouteContext();
   const qc = useQueryClient();
   const [form, setForm] = useState(empty);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const { data } = useQuery({
     queryKey: ["rules"],
     queryFn: async () => {
@@ -38,9 +40,17 @@ function Regras() {
   }
   async function create() {
     if (!form.trigger || !form.complement || !form.explanation) return void toast.error("Preencha gatilho, complemento e explicação.");
-    const { error } = await supabase.from("association_rules").insert({ ...form, condition: form.condition || null, clarifying_question: form.clarifying_question || null });
-    if (error) return void toast.error("Não foi possível criar.");
+    if (saving) return;
+    setSaving(true);
+    const values = { ...form, condition: form.condition || null, clarifying_question: form.clarifying_question || null };
+    const { error } = editingId
+      ? await supabase.from("association_rules").update(values).eq("id", editingId)
+      : await supabase.from("association_rules").insert(values);
+    setSaving(false);
+    if (error) return void toast.error("Não foi possível salvar.");
+    toast.success(editingId ? "Alterações salvas. Conteúdo alterado exige nova revisão." : "Regra criada como rascunho.");
     setForm(empty);
+    setEditingId(null);
     refresh();
   }
 
@@ -63,7 +73,12 @@ function Regras() {
                   <div className="text-xs text-muted-foreground">{r.explanation}{r.condition ? ` · Condição: ${r.condition}` : ""}</div>
                   {r.reviewed_at && <div className="text-[11px] text-muted-foreground">Revisada em {new Date(r.reviewed_at).toLocaleDateString("pt-BR")}</div>}
                 </div>
-                <div className="flex items-center gap-3 text-xs">
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <Button size="sm" variant="outline" onClick={() => {
+                    setEditingId(r.id);
+                    setForm({ category: r.category as Cat, trigger: r.trigger, complement: r.complement, condition: r.condition ?? "", clarifying_question: r.clarifying_question ?? "", explanation: r.explanation });
+                    document.getElementById("rule-form")?.scrollIntoView({ block: "center" });
+                  }}>Editar</Button>
                   {r.reviewed ? (
                     <Button size="sm" variant="ghost" onClick={() => update(r.id, { reviewed: false, active: false, reviewed_by: null, reviewed_at: null })}>Desfazer revisão</Button>
                   ) : (
@@ -79,8 +94,8 @@ function Regras() {
           </ul>
         </section>
       ))}
-      <section className="space-y-2 rounded-xl border border-dashed border-border bg-card p-4">
-        <h2 className="font-semibold">Nova regra</h2>
+      <section id="rule-form" className="space-y-2 rounded-xl border border-dashed border-border bg-card p-4">
+        <h2 className="font-semibold">{editingId ? "Editar regra" : "Nova regra"}</h2>
         <div className="grid gap-2 md:grid-cols-2">
           <select aria-label="Categoria" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as Cat })} className="h-9 rounded-md border border-input bg-card px-2 text-sm">
             {(["pisos", "sanitarios", "pintura"] as Cat[]).map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
@@ -91,7 +106,8 @@ function Regras() {
           <Input placeholder="Pergunta de esclarecimento (opcional)" value={form.clarifying_question} onChange={(e) => setForm({ ...form, clarifying_question: e.target.value })} />
           <Input placeholder="Explicação ao cliente" value={form.explanation} onChange={(e) => setForm({ ...form, explanation: e.target.value })} />
         </div>
-        <Button onClick={create}>Adicionar (como rascunho)</Button>
+        <div className="flex gap-2"><Button onClick={create} disabled={saving}>{editingId ? "Salvar alterações" : "Adicionar (como rascunho)"}</Button>
+        {editingId && <Button variant="outline" onClick={() => { setEditingId(null); setForm(empty); }}>Cancelar</Button>}</div>
       </section>
     </div>
   );

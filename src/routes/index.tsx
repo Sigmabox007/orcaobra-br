@@ -88,7 +88,7 @@ function Index() {
       setAnalyzedText(text);
       if (r.ok) {
         setInterp(r.result);
-        setItems(r.result.items.length ? r.result.items : [{ name: text.slice(0, 120), quantity: "" }]);
+        setItems(r.result.items);
         setAnswers(r.result.questions.map(() => ""));
         setAiFailed(false);
         setAiNotice("");
@@ -98,13 +98,13 @@ function Index() {
         if (!r.result.questions.length) void loadSuggestions(r.result, []);
       } else {
         setInterp(null);
-        setItems([{ name: text.slice(0, 120), quantity: "" }]);
+        setItems([]);
         fallback("O assistente não está disponível agora. Você pode continuar com o seu pedido normalmente.");
         setStep("resumo");
       }
     } catch {
       setInterp(null);
-      setItems([{ name: text.slice(0, 120), quantity: "" }]);
+      setItems([]);
       fallback("O assistente não está disponível agora. Você pode continuar com o seu pedido normalmente.");
       setStep("resumo");
     } finally {
@@ -136,7 +136,7 @@ function Index() {
     if (!consent) return setError("É preciso autorizar o contato para enviarmos o orçamento.");
     setBusy(true);
     try {
-      const qa = (interp?.questions ?? []).map((q, idx) => ({ question: q, answer: answers[idx] ?? "" })).filter((a) => a.answer.trim());
+      const qa = (interp?.questions ?? []).map((q, idx) => ({ question: q, answer: answers[idx] ?? "" }));
       const r = await submitFn({
         data: {
           name,
@@ -289,9 +289,11 @@ function Index() {
             <h3 className="text-sm font-semibold text-muted-foreground">O que você escreveu</h3>
             <p className="mt-1 whitespace-pre-wrap">{text}</p>
             {interp && <p className="mt-2 text-xs text-muted-foreground">Categoria: {CATEGORY_LABEL[interp.category]}</p>}
+            {interp?.activity && <p className="mt-2 text-sm"><strong>Serviço ou necessidade:</strong> {interp.activity}</p>}
           </div>
           <div className="rounded-xl border border-border bg-card p-4">
-            <h3 className="mb-2 text-sm font-semibold text-muted-foreground">Itens (pode ajustar)</h3>
+            <h3 className="mb-2 text-sm font-semibold text-muted-foreground">Produtos solicitados</h3>
+            {items.length === 0 && <p className="text-sm text-muted-foreground">Nenhum produto específico informado.</p>}
             <ul className="space-y-2">
               {items.map((it, i) => (
                 <li key={i} className="flex gap-2">
