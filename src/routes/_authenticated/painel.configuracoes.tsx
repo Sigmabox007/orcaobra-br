@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute("/_authenticated/painel/configuracoes")({
-  head: () => ({ meta: [{ title: "Configurações — OrçaObra" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({ meta: [{ title: "Configurações — OrçaObra" }, { name: "description", content: "Configurações de limites e dados de teste do OrçaObra." }, { property: "og:title", content: "Configurações — OrçaObra" }, { property: "og:description", content: "Configurações de limites e dados de teste do OrçaObra." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }, { name: "robots", content: "noindex" }] }),
   component: Config,
 });
 

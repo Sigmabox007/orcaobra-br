@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { CATEGORY_LABEL } from "@/lib/orcaobra/rules";
 
 export const Route = createFileRoute("/_authenticated/painel/regras")({
-  head: () => ({ meta: [{ title: "Complementos — OrçaObra" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({ meta: [{ title: "Complementos — OrçaObra" }, { name: "description", content: "Revisão de regras de complementos do OrçaObra." }, { property: "og:title", content: "Complementos — OrçaObra" }, { property: "og:description", content: "Revisão de regras de complementos do OrçaObra." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }, { name: "robots", content: "noindex" }] }),
   component: Regras,
 });
 
@@ -73,7 +73,7 @@ function Regras() {
                   <div className="text-xs text-muted-foreground">{r.explanation}{r.condition ? ` · Condição: ${r.condition}` : ""}</div>
                   {r.reviewed_at && <div className="text-[11px] text-muted-foreground">Revisada em {new Date(r.reviewed_at).toLocaleDateString("pt-BR")}</div>}
                 </div>
-                <div className="flex items-center gap-3 text-xs">
+                <div className="flex flex-wrap items-center gap-3 text-xs">
                   <Button size="sm" variant="outline" onClick={() => {
                     setEditingId(r.id);
                     setForm({ category: r.category as Cat, trigger: r.trigger, complement: r.complement, condition: r.condition ?? "", clarifying_question: r.clarifying_question ?? "", explanation: r.explanation });

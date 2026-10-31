@@ -81,6 +81,10 @@ describe("privacidade", () => {
 });
 
 describe("indicadores", () => {
+  it("exclui testes de todos os indicadores e retornos", () => {
+    const statuses = ["recebido", "esclarecimento", "preparacao", "orcamento_enviado", "aguardando_retorno", "convertido", "perdido"] as const;
+    expect(computeIndicators(statuses.map((status) => ({ status, is_test: true, needs_followup_at: "2020-01-01" })))).toEqual({ total: 0, novos: 0, aguardandoOrcamento: 0, orcamentosEnviados: 0, aguardandoRetorno: 0, convertidos: 0, encerrados: 0, precisamRetorno: 0 });
+  });
   it("exclui pedidos de teste", () => {
     const r = computeIndicators([
       { status: "recebido", is_test: true, needs_followup_at: null },

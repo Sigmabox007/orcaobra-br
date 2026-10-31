@@ -12,7 +12,7 @@ import { StatusBadge, TestBadge } from "@/components/orcaobra/status-badge";
 import { CATEGORY_LABEL, STATUSES, STATUS_LABEL, whatsappLink, requestedProducts, pendingClarifications, type Status } from "@/lib/orcaobra/rules";
 
 export const Route = createFileRoute("/_authenticated/painel/pedidos/$id")({
-  head: () => ({ meta: [{ title: "Pedido — OrçaObra" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({ meta: [{ title: "Pedido — OrçaObra" }, { name: "description", content: "Detalhes e acompanhamento de um pedido de orçamento OrçaObra." }, { property: "og:title", content: "Pedido — OrçaObra" }, { property: "og:description", content: "Detalhes e acompanhamento de um pedido de orçamento OrçaObra." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }, { name: "robots", content: "noindex" }] }),
   component: Detalhe,
 });
 
@@ -64,6 +64,7 @@ function Detalhe() {
     qc.invalidateQueries({ queryKey: ["request", id] });
     qc.invalidateQueries({ queryKey: ["requests"] });
     qc.invalidateQueries({ queryKey: ["indicators"] });
+    qc.invalidateQueries({ queryKey: ["test-count"] });
   };
 
   async function saveStatus() {
