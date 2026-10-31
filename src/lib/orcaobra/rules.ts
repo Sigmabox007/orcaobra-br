@@ -4,6 +4,32 @@ export const MAX_SUGGESTIONS = 5;
 export const MAX_QUESTIONS = 3;
 export const MAX_TEXT = 1500;
 
+export type ProductItem = { name: string; quantity: string };
+
+/** Discard legacy service-as-item fallbacks, never infer products or quantities. */
+export function requestedProducts<T extends { name: string; quantity: string | null }>(items: T[], originalText: string, activity = ""): T[] {
+  const normalize = (s: string) => s.trim().toLocaleLowerCase("pt-BR").replace(/[.!?]+$/, "");
+  const service = /\b(pintar|instalar|reformar|construir|assentar|revestir)\b/i.test(originalText);
+  return items.filter((item) => {
+    if (!item.name.trim()) return false;
+    if (item.quantity?.trim()) return true;
+    const name = normalize(item.name);
+    return !(service && (name === normalize(originalText) || name === normalize(originalText.slice(0, 120)) || (activity && name === normalize(activity))));
+  });
+}
+
+/** Pending means an explicitly asked question without a stored answer, not initial AI guesses. */
+export function pendingClarifications(answers: { question: string; answer: string }[]) {
+  return answers.filter((a) => !a.answer.trim());
+}
+
+export function buildRequestItems(items: ProductItem[], suggestions: { name: string; accepted: boolean }[]) {
+  return [
+    ...items.filter((i) => i.name.trim()).map((i) => ({ origin: "original", name: i.name.trim(), quantity: i.quantity || null })),
+    ...suggestions.filter((s) => s.accepted).map((s) => ({ origin: "complement", name: s.name, quantity: null })),
+  ];
+}
+
 export const STATUSES = [
   "recebido",
   "esclarecimento",

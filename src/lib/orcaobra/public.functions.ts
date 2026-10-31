@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { MAX_TEXT, MAX_QUESTIONS, eligibleRules, generateProtocol, normalizeWhatsapp, sanitizeSuggestions } from "./rules";
+import { MAX_TEXT, MAX_QUESTIONS, eligibleRules, generateProtocol, normalizeWhatsapp, sanitizeSuggestions, buildRequestItems } from "./rules";
 
 const sessionId = z.string().min(8).max(64);
 
@@ -108,7 +108,10 @@ export const submitRequest = createServerFn({ method: "POST" })
       ? await supabaseAdmin.from("association_rules").select("id, complement").in("id", ruleIds).eq("reviewed", true).eq("active", true)
       : { data: [] as { id: string; complement: string }[] };
     const valid = new Map((okRules ?? []).map((r) => [r.id, r.complement]));
-    const suggestions = data.suggestions.filter((s) => valid.has(s.rule_id)).map((s) => ({ ...s, name: valid.get(s.rule_id)! }));
+     const suggestions = data.suggestions.flatMap((s) => {
+       const name = valid.get(s.rule_id);
+       return name ? [{ ...s, name }] : [];
+     });
 
     let protocol = "";
     let requestId = "";
@@ -139,16 +142,8 @@ export const submitRequest = createServerFn({ method: "POST" })
     }
     if (!requestId) return { ok: false as const, error: "Não foi possível registrar agora. Tente novamente." };
 
-    const items = [
-      ...(data.items.length ? data.items : [{ name: data.originalText.slice(0, 120), quantity: "" }]).map((i) => ({
-        request_id: requestId,
-        origin: "original",
-        name: i.name,
-        quantity: i.quantity || null,
-      })),
-      ...suggestions.filter((s) => s.accepted).map((s) => ({ request_id: requestId, origin: "complement", name: s.name, quantity: null })),
-    ];
-    await supabaseAdmin.from("request_items").insert(items);
+    const items = buildRequestItems(data.items, suggestions).map((i) => ({ ...i, request_id: requestId }));
+    if (items.length) await supabaseAdmin.from("request_items").insert(items);
     if (suggestions.length)
       await supabaseAdmin
         .from("suggested_complements")

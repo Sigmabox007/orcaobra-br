@@ -8,6 +8,13 @@
       "when": 1793278037399,
       "tag": "0000_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793409813018,
+      "tag": "0001_guard_test_classification_and_rule_revision",
+      "breakpoints": true
     }
   ]
 }
