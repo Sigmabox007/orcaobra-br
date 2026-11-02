@@ -72,11 +72,24 @@ export function whatsappLink(digits: string, message: string): string {
   return `https://wa.me/55${digits}?text=${encodeURIComponent(message)}`;
 }
 
-/** Masks phone numbers and e-mails before text is sent to the AI. */
+const EMAIL_RE = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu;
+// Formatted CPF (000.000.000-00). Unformatted 11 digits are caught by the phone rule.
+const CPF_RE = /(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)/g;
+// Brazilian phones: optional +55/55/0, DDD (with or without parentheses), mobile 9xxxx or landline [2-5]xxx, then 4 digits.
+// Without DDD only formats that look like a local phone (98765-4321, 987654321, 3333-4444) are masked,
+// so quantities, measures, CEPs and product/EAN codes stay intact.
+const BR_PHONE_RE =
+  /(?<!\d)(?:(?:\+\s?55[\s.-]?|55[\s.-]?|0)?(?:\(\s?[1-9]{2}\s?\)|[1-9]{2})[\s.-]?(?:9[\s.-]?\d{4}|[2-5]\d{3})[\s.-]?\d{4}|(?:9\d{4}[\s.-]?|[2-5]\d{3}[.-])\d{4})(?!\d)/g;
+// International numbers written with a leading "+".
+const INTL_PHONE_RE = /\+\d[\d\s().-]{7,}\d/g;
+
+/** Masks e-mails, phone numbers and formatted CPFs in text sent to the AI. The stored original is never altered. */
 export function maskContacts(text: string): string {
   return text
-    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[e-mail removido]")
-    .replace(/(\+?\d[\d\s().-]{7,}\d)/g, "[telefone removido]");
+    .replace(EMAIL_RE, "[e-mail removido]")
+    .replace(CPF_RE, "[documento removido]")
+    .replace(BR_PHONE_RE, "[telefone removido]")
+    .replace(INTL_PHONE_RE, "[telefone removido]");
 }
 
 /** Random, non-sequential protocol like OO-7KQ4-M2XD. */
