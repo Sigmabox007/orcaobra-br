@@ -72,8 +72,8 @@ function Privacidade() {
           </ul>
           <p>Durante o atendimento, a equipe da loja registra o andamento do pedido (situação, histórico, anotações internas e retornos feitos).</p>
           <p>
-            Para segurança e prevenção de abusos, guardamos também registros técnicos: um código gerado a partir do endereço de internet (IP) e
-            do tipo de navegador — o IP em si não é armazenado —, um identificador aleatório da visita e a data e o resultado de cada uso do
+            Para segurança e prevenção de abusos, guardamos também registros técnicos: um código gerado com chave secreta a partir do endereço
+            de internet (IP) e do tipo de navegador — o IP em si não é armazenado —, um identificador aleatório da visita e a data e o resultado de cada uso do
             assistente. Esses registros não incluem nome, telefone nem o texto do pedido, mas podem ser considerados dados pessoais.
           </p>
           <p>
@@ -144,11 +144,9 @@ function Privacidade() {
               hospedagem pode registrar dados técnicos de acesso, como IP e navegador, para funcionamento e segurança.
             </li>
             <li>
-              <strong>Lovable AI Gateway e OpenAI</strong>: processamento das análises de IA descritas acima, fora do Brasil.
-            </li>
-            <li>
-              <strong>Google Fonts</strong>: as fontes de texto do site são carregadas dos servidores do Google, que recebem o IP e dados do
-              navegador de quem visita a página.
+              <strong>Lovable AI Gateway e OpenAI</strong>: processamento das análises de IA descritas acima, fora do Brasil. Conforme a
+              configuração do serviço, a Lovable pode guardar o conteúdo dessas análises por até 90 dias para diagnóstico, e o fornecedor do
+              modelo pode manter registros pelo prazo previsto em suas próprias políticas.
             </li>
             <li>
               <strong>WhatsApp (Meta)</strong>: usado pela loja para conversar com você sobre o orçamento.
@@ -178,7 +176,7 @@ function Privacidade() {
               exceto quando obrigações legais exigirem guarda por mais tempo.
             </li>
             <li>
-              <strong>Registros técnicos de segurança:</strong> somente pelo tempo necessário à prevenção de abusos.
+              <strong>Registros técnicos de segurança:</strong> até 6 meses, exceto quando obrigações legais exigirem guarda por mais tempo.
             </li>
           </ul>
           <p>

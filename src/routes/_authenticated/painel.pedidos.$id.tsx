@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { StatusBadge, TestBadge } from "@/components/orcaobra/status-badge";
+import { DeleteRequestCard } from "@/components/orcaobra/delete-request";
 import { CATEGORY_LABEL, STATUSES, STATUS_LABEL, whatsappLink, requestedProducts, pendingClarifications, type Status } from "@/lib/orcaobra/rules";
 
 export const Route = createFileRoute("/_authenticated/painel/pedidos/$id")({
@@ -190,6 +191,7 @@ function Detalhe() {
               ))}
             </ul>
           </Card>
+          {isAdmin && <DeleteRequestCard id={id} protocol={r.protocol} status={r.status} />}
         </div>
       </div>
     </div>
