@@ -1,7 +1,8 @@
 import { generateResponse, GatewayError } from "@lovable.dev/ai-gateway";
 import { getRequestHeader } from "@tanstack/react-start/server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { checkAiLimit, maskContacts, MAX_QUESTIONS, requestedProducts, type Limits } from "./rules";
+import { checkAiLimit, MAX_QUESTIONS, requestedProducts, type Limits } from "./rules";
+import { buildInterpretPrompt, buildSuggestPrompt } from "./ai-prompts";
 
 const MODEL = "openai/gpt-6-astra" as const;
 
@@ -109,12 +110,7 @@ const interpretSchema = {
 const clip = (s: unknown, n: number) => (typeof s === "string" ? s.trim().slice(0, n) : "");
 
 export async function interpret(text: string): Promise<Interpretation> {
-  const masked = maskContacts(text);
-  const out = (await callJson(
-    `Analise o pedido e retorne JSON com: category (pisos, sanitarios, pintura ou outro), activity (atividade em poucas palavras), items (produtos mencionados e a quantidade exatamente como o cliente informou, ou "" se não informada), missing_info (informações relevantes ausentes) e questions (no máximo ${MAX_QUESTIONS} perguntas curtas e pertinentes; vazio se não precisar).\n<pedido_cliente>\n${masked}\n</pedido_cliente>`,
-    "interpretacao",
-    interpretSchema,
-  )) as Interpretation;
+  const out = (await callJson(buildInterpretPrompt(text), "interpretacao", interpretSchema)) as Interpretation;
   const cats = ["pisos", "sanitarios", "pintura", "outro"] as const;
   return {
     category: cats.includes(out.category) ? out.category : "outro",
@@ -147,14 +143,9 @@ export async function suggest(
   answers: { question: string; answer: string }[],
   rules: { id: string; trigger: string; complement: string; condition: string | null; explanation: string }[],
 ) {
-  const masked = maskContacts(text);
-  const qa = answers.map((a) => `- ${a.question}: ${maskContacts(a.answer)}`).join("\n");
-  const catalog = rules.map((r) => `${r.id} | gatilho: ${r.trigger} | complemento: ${r.complement} | condição: ${r.condition ?? "-"}`).join("\n");
-  const out = (await callJson(
-    `Escolha, SOMENTE da lista de regras abaixo, até 5 complementos realmente pertinentes ao pedido. Não inclua itens que o cliente já pediu. Para cada um, dê rule_id exato e um motivo curto (uma frase, sem preço, sem garantir compatibilidade). Se nenhum for pertinente, retorne lista vazia.\nREGRAS:\n${catalog}\n<pedido_cliente>\n${masked}\n</pedido_cliente>\n<respostas_cliente>\n${qa || "(sem respostas)"}\n</respostas_cliente>`,
-    "sugestoes",
-    suggestSchema,
-  )) as { suggestions: { rule_id: string; reason: string }[] };
+  const out = (await callJson(buildSuggestPrompt(text, answers, rules), "sugestoes", suggestSchema)) as {
+    suggestions: { rule_id: string; reason: string }[];
+  };
   return Array.isArray(out.suggestions) ? out.suggestions : [];
 }
 
