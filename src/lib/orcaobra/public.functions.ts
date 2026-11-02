@@ -8,7 +8,11 @@ export const interpretRequest = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ text: z.string().trim().min(3).max(MAX_TEXT), sessionId }).parse(d))
   .handler(async ({ data }) => {
     const ai = await import("./ai.server");
-    const origin = await ai.originHash();
+    const origin = await ai.originHash().catch(() => null);
+    if (!origin) {
+      console.error("origin id unavailable", "origin_secret_missing");
+      return { ok: false as const, reason: "error" };
+    }
     const gate = await ai.guardAi(origin, data.sessionId);
     if (!gate.ok) return { ok: false as const, reason: "limit" };
     try {
@@ -45,7 +49,11 @@ export const suggestComplements = createServerFn({ method: "POST" })
       .eq("active", true);
     const rules = eligibleRules(rows ?? []);
     if (rules.length === 0) return { ok: true as const, suggestions: [] };
-    const origin = await ai.originHash();
+    const origin = await ai.originHash().catch(() => null);
+    if (!origin) {
+      console.error("origin id unavailable", "origin_secret_missing");
+      return { ok: false as const, reason: "error", suggestions: [] };
+    }
     const gate = await ai.guardAi(origin, data.sessionId);
     if (!gate.ok) return { ok: false as const, reason: "limit", suggestions: [] };
     try {
