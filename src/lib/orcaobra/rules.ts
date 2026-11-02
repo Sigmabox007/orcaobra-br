@@ -169,3 +169,20 @@ export function computeIndicators(rows: CountableRequest[], now = new Date()) {
     ).length,
   };
 }
+
+/** Deletion confirmation: the typed protocol must match exactly (surrounding spaces ignored). */
+export function protocolConfirmed(typed: string, protocol: string): boolean {
+  return protocol.length > 0 && typed.trim() === protocol;
+}
+
+/**
+ * Pseudonymous origin id for abuse limits: HMAC-SHA256(secret, ip + user agent), 32 hex chars.
+ * Without the secret the id cannot be recomputed from a guessed IP. Throws when the secret is missing.
+ */
+export async function originId(secret: string | undefined, ip: string, userAgent: string): Promise<string> {
+  if (!secret) throw new Error("origin_secret_missing");
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`orcaobra:${ip}:${userAgent.slice(0, 80)}`));
+  return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+}

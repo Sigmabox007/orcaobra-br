@@ -94,3 +94,33 @@ describe("indicadores", () => {
     expect(r.novos).toBe(1);
   });
 });
+
+describe("exclusão de pedido", () => {
+  it("só confirma quando o protocolo digitado é exatamente o do pedido", () => {
+    expect(protocolConfirmed("OO-AB23-CD45", "OO-AB23-CD45")).toBe(true);
+    expect(protocolConfirmed("  OO-AB23-CD45 ", "OO-AB23-CD45")).toBe(true);
+    expect(protocolConfirmed("oo-ab23-cd45", "OO-AB23-CD45")).toBe(false);
+    expect(protocolConfirmed("OO-AB23-CD4", "OO-AB23-CD45")).toBe(false);
+    expect(protocolConfirmed("", "")).toBe(false);
+  });
+});
+
+describe("identificador de origem", () => {
+  it("usa HMAC com chave: mesma entrada e chave geram o mesmo código de 32 caracteres", async () => {
+    const a = await originId("chave-a", "203.0.113.5", "Mozilla");
+    expect(a).toMatch(/^[0-9a-f]{32}$/);
+    expect(await originId("chave-a", "203.0.113.5", "Mozilla")).toBe(a);
+  });
+  it("muda com outra chave, então não pode ser recalculado só a partir do IP", async () => {
+    expect(await originId("chave-b", "203.0.113.5", "Mozilla")).not.toBe(await originId("chave-a", "203.0.113.5", "Mozilla"));
+  });
+  it("difere do hash simples sem chave usado antes", async () => {
+    const plain = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("orcaobra:203.0.113.5:Mozilla")));
+    const old = Array.from(plain, (b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+    expect(await originId("chave-a", "203.0.113.5", "Mozilla")).not.toBe(old);
+  });
+  it("recusa funcionar sem chave secreta", async () => {
+    await expect(originId(undefined, "203.0.113.5", "Mozilla")).rejects.toThrow("origin_secret_missing");
+    await expect(originId("", "203.0.113.5", "Mozilla")).rejects.toThrow("origin_secret_missing");
+  });
+});
