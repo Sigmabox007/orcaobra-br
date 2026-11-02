@@ -136,7 +136,8 @@ export const submitRequest = createServerFn({ method: "POST" })
         .single();
       if (row) requestId = row.id;
       else if (error && error.code !== "23505") {
-        console.error(error);
+        // Log only the error code: Postgres "details" can echo the full row (name, WhatsApp, order text).
+        console.error("submit insert failed", error.code);
         return { ok: false as const, error: "Não foi possível registrar agora. Tente novamente." };
       }
     }
