@@ -10,10 +10,11 @@
 - [x] Remover dados pessoais de log de erro do envio.
 - [x] Reescrever página de Privacidade com dados oficiais da loja.
 - [x] Documentar procedimento manual de retenção e pendências.
+- [x] Botão de exclusão de pedido real no painel (feito na última rodada).
 # Última rodada antes do piloto
-- [ ] Exclusão segura de pedido pelo administrador (protocolo digitado, aviso, sem executar).
-- [ ] Identificador de origem com HMAC-SHA256 e chave secreta.
-- [ ] Fontes hospedadas localmente.
-- [ ] Retenção de 6 meses dos registros de segurança — procedimento manual.
-- [ ] Verificar retenção dos fornecedores de IA nas documentações oficiais.
-- [ ] Build, testes, preservação dos dados e relatório curto.
+- [x] Exclusão segura de pedido pelo administrador (protocolo digitado, aviso, sem executar).
+- [x] Identificador de origem com HMAC-SHA256 e chave secreta.
+- [x] Fontes hospedadas localmente.
+- [x] Retenção de 6 meses dos registros de segurança — procedimento manual.
+- [x] Verificar retenção dos fornecedores de IA nas documentações oficiais.
+- [x] Build, testes, preservação dos dados e relatório curto.
