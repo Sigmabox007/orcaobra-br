@@ -26,4 +26,10 @@ describe("página de privacidade", () => {
     render(<Page />);
     expect(screen.getByText(/até 12 meses após o encerramento do orçamento/)).toBeInTheDocument();
   });
+
+  it("informa a retenção de até 6 meses dos registros de segurança", () => {
+    const Page = Route.options.component!;
+    render(<Page />);
+    expect(screen.getByText(/até 6 meses, exceto quando obrigações legais/)).toBeInTheDocument();
+  });
 });
