@@ -99,7 +99,11 @@ export const submitRequest = createServerFn({ method: "POST" })
     if (!phone) return { ok: false as const, error: "Informe um WhatsApp válido com DDD." };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { originHash } = await import("./ai.server");
-    const origin = await originHash();
+    const origin = await originHash().catch(() => null);
+    if (!origin) {
+      console.error("origin id unavailable", "origin_secret_missing");
+      return { ok: false as const, error: "Não foi possível registrar agora. Tente novamente." };
+    }
     const { data: settings } = await supabaseAdmin.from("app_settings").select("submits_per_origin_hour").eq("id", 1).single();
     const { count } = await supabaseAdmin
       .from("submit_log")
