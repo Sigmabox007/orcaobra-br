@@ -26,6 +26,8 @@ Não existe:
 
 Estado real: 1 loja, 10 pedidos (todos marcados como teste), 22 regras (3 revisadas e ativas), 2 administradores, 0 vendedores, 14 registros de uso de IA.
 
+Importante: os 10 pedidos existentes são todos testes. A operação cotidiana da loja (equipe atendendo pedidos reais no dia a dia) ainda não foi validada.
+
 ```text
 stores 1──n quote_requests ──┬─ request_items        (apaga junto)
                              ├─ suggested_complements (apaga junto) ── association_rules (fica nulo)
@@ -78,10 +80,12 @@ Site público + painel na mesma aplicação; ações públicas só por funções
 
 | Prioridade | Risco |
 |---|---|
+| P0 | Envio pode gravar pedido incompleto sem aviso (sem transação) |
+| P0 | Permissões do vendedor nunca testadas de verdade |
 | P0 | Sem isolamento por loja: segunda loja veria pedidos da primeira |
 | P0 | Configurações e regras globais: uma loja alteraria as de outra |
-| P1 | Envio pode gravar pedido incompleto sem aviso |
 | P1 | Vendedor pode editar qualquer campo; equipe gerida manualmente |
+| P1 | Operação diária ainda não validada (só pedidos de teste) |
 | P1 | Retenção e cópia de segurança manuais/não testadas |
 | P2 | Custo de IA sem medição por loja; categorias fixas |
 | P2 | Sem aviso de novo pedido nem monitoramento de erros |
@@ -94,13 +98,35 @@ Fluxo do cliente, interpretação e sugestões, regras puras e testes, mascarame
 
 Cada fase é aprovada separadamente, preserva a loja piloto e termina com build e testes.
 
-**Fase 0 — Segurança da base (sem mudar comportamento)**
-Verificar erros nas gravações do envio; teste com perfil vendedor; documentar cópia de segurança.
-Aceite: falha simulada em item retorna erro; vendedor não acessa Complementos/Configurações; 56+ testes passam.
+### Requisitos obrigatórios antes de qualquer migração
+1. Verificação de backup: confirmar que existe cópia recente e restaurável do banco.
+2. Plano de recuperação escrito: como desfazer a mudança e quanto tempo leva.
+3. Contagem de registros por tabela antes e depois; qualquer diferença inesperada interrompe a fase.
+4. Testes de regressão: todos os testes automáticos, fluxo público completo e painel com admin e vendedor.
+
+### Princípio permanente: pedido sem IA
+Se a IA estiver indisponível ou o limite esgotado, o cliente continua podendo enviar o pedido sem IA (como hoje). As fases preservam esse caminho; regras comerciais futuras (ex.: limite por plano) poderão ajustá-lo, mas só por decisão de vocês.
+
+**Fase 0 — Integridade dos pedidos e permissões reais (prioridade máxima)**
+- Envio do pedido gravado de forma transacional: pedido, itens, complementos e histórico entram juntos ou nada entra.
+- Criar uma conta de vendedor de teste e verificar, no banco/API (não só na tela), o que ela pode ler e alterar.
+- Restringir quais campos o vendedor pode editar (ex.: status, notas, retornos), mantendo marcação de teste e exclusão só para admin.
+- Revisar as funções SECURITY DEFINER (`has_role`, `is_staff`, gatilhos): caminho de busca fixo, sem permitir consultar papéis de terceiros além do necessário, execução negada a visitantes anônimos quando não for preciso.
+Aceite: falha simulada em item desfaz o pedido inteiro; vendedor via API não altera campos proibidos, não apaga pedidos, não edita regras nem configurações; anônimo não lê nenhuma tabela; 56+ testes passam.
+
+**Fase 0.5 — Operação da loja piloto**
+- Cadastro dos vendedores reais pelo painel (convite por e-mail, admin define o papel).
+- Aviso de novo pedido por e-mail para a equipe.
+- Busca básica por protocolo, nome e status.
+- Acompanhamento de retornos: lista dos pedidos que precisam de retorno hoje/atrasados.
+Aceite: admin cadastra vendedor sem mexer no banco; novo pedido gera aviso; busca encontra pedido pelo protocolo; retorno vencido aparece na lista; uma semana de uso real pela equipe sem incidentes antes de seguir.
 
 **Fase 1 — Loja em todas as tabelas**
-Adicionar loja a regras, configurações, uso de IA, envios, histórico, retornos; preencher tudo com a loja piloto.
-Aceite: contagens antes/depois idênticas; nenhum registro sem loja; site público igual.
+Adicionar loja a regras, configurações, histórico, retornos; preencher tudo com a loja piloto.
+Separação de configurações:
+- Por loja: limites de IA da loja, categorias, regras de complementos, identidade, envios por hora da loja.
+- Globais (continuam valendo para toda a plataforma): proteção contra abuso por origem/sessão, registro de envios, limite diário global de IA, liga/desliga geral da IA.
+Aceite: contagens antes/depois idênticas; nenhum registro sem loja; site público igual; proteções globais seguem bloqueando abuso.
 
 **Fase 2 — Equipe por loja**
 Vínculo usuário-loja com papel; migrar os 2 administradores para a loja piloto.
@@ -108,7 +134,9 @@ Aceite: os dois admins continuam entrando e vendo tudo como hoje.
 
 **Fase 3 — Isolamento por loja**
 Políticas de segurança filtram pela loja do usuário.
-Aceite: usuário de uma loja de teste B não vê nem altera nada da loja piloto, e vice-versa.
+Aceite (testes diretos no banco/API, não só na tela): admin e vendedor da loja de teste B não leem, alteram nem apagam nada da loja piloto, e vice-versa; vendedor de uma loja não ganha permissões de admin em outra; funções SECURITY DEFINER não vazam dados entre lojas.
+
+**Trava comercial:** nenhuma segunda loja real é cadastrada antes de as Fases 1 a 3 estarem concluídas e esses testes de isolamento aprovados. Até lá, só lojas fictícias de teste.
 
 **Fase 4 — Endereço e identidade por loja**
 Página pública por loja; endereço atual continua levando à loja piloto; dados e privacidade por loja.
@@ -118,9 +146,9 @@ Aceite: pedido em `/` e em `/l/<loja>` cai na loja certa.
 Limites e medição de uso por loja; categorias por loja.
 Aceite: esgotar limite da loja B não afeta a piloto.
 
-**Fase 6 — Operação**
-Gestão de equipe pela tela, filtros, busca, paginação, aviso por e-mail de novo pedido.
-Aceite: admin convida vendedor sem mexer no banco; novo pedido gera e-mail.
+**Fase 6 — Operação avançada**
+Filtros por data, paginação, atribuição a vendedor, exportação simples (o básico já veio na Fase 0.5).
+Aceite: lista com 500 pedidos fictícios carrega paginada; filtros retornam o esperado.
 
 **Fase 7 — Administração da plataforma**
 Papel de dono da plataforma, cadastro de lojas, painel geral.
@@ -135,6 +163,7 @@ Aceite: loja sem plano ativo não recebe novos pedidos com IA, mas dados ficam a
 - Mudanças de banco só aditivas; colunas novas preenchidas com a loja piloto antes de qualquer regra nova.
 - Contagem de registros antes/depois de cada fase; nenhuma exclusão.
 - Testar cada fase primeiro com uma loja de teste fictícia.
+- Antes de cada migração: backup verificado, plano de recuperação, contagens e regressão (ver requisitos acima).
 - Endereço publicado continua funcionando igual; não publicar sem sua autorização.
 
 ## Detalhes técnicos
