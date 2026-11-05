@@ -23,7 +23,7 @@ Risco: pedido sem itens, sem complementos ou sem histórico, e o cliente vê "su
 
 Uma única função no banco, `public.submit_quote_request(payload jsonb)`, que grava tudo dentro de uma transação: pedido, itens, complementos, histórico inicial e registro de envio. Qualquer erro desfaz tudo.
 
-O servidor continua fazendo, antes de chamar a função, todas as proteções atuais: validação, origem com chave, limite de envios, conferência das regras, limites da IA (que nem passam por aqui). Nada disso muda.
+O servidor continua fazendo, antes de chamar a função: validação de entrada (zod, WhatsApp, campo-isca, consentimento), origem com chave HMAC (falha fechada) e conferência das regras. Os limites da IA não passam por aqui e não mudam. A verificação do limite de envios sai do servidor e passa a ser feita só no banco (ver "Limite de envios e concorrência").
 
 ### Acesso restrito
 - `SECURITY INVOKER`, `search_path` fixo.
@@ -58,7 +58,19 @@ Correção dentro da Fase 0A: a conferência do limite passa para dentro da fun�
 2. Com a trava, verifica primeiro se a chave já existe (recuperação, ver acima). Recuperação legítima não conta como envio e não é bloqueada pelo limite.
 3. Só então conta `submit_log` da última hora, lendo o limite atual de `app_settings` (valor não muda), e recusa se atingido.
 4. Grava pedido, itens, complementos, histórico e `submit_log`; a trava é liberada no fim.
-A conferência atual no servidor continua como primeira barreira (sem custo para o banco); a do banco é a definitiva. Origens diferentes não se bloqueiam entre si.
+A contagem preliminar no servidor é removida: se ela bloqueasse primeiro, a recuperação nunca chegaria ao banco. O banco é a única autoridade do limite de envios, sempre sob a trava da origem. Origens diferentes não se bloqueiam entre si.
+
+Ordem final de uma tentativa:
+```text
+servidor: validação de entrada -> campo-isca -> HMAC da origem (falha fechada) -> regras
+banco (transação + trava da origem):
+  chave existe?
+    sim: mesmo conteúdo + mesma origem + <24h -> devolve protocolo (não conta envio)
+         caso contrário                      -> recusa genérica
+    não: envios da origem na última hora >= limite -> recusa "muitos envios"
+         senão -> grava tudo + submit_log -> devolve protocolo
+```
+Proteções que continuam ativas: validação, campo-isca, HMAC, limite de envios (agora no banco, sem corrida) e limites da IA. Nenhum outro caminho grava pedidos.
 
 ## 3. Efeito na versão publicada
 
@@ -86,7 +98,7 @@ Não muda: interface, textos, papéis, usuários, limites de IA, regras, privaci
 
 Automatizados (vitest, sem banco):
 - `buildSubmitPayload`: itens, complementos aceitos/recusados, sugestões inválidas descartadas, chave preservada.
-- `submitRequest` com cliente simulado: erro da função → `ok: false` sem protocolo; sucesso → protocolo; limite de envios ainda bloqueia; origem ausente ainda falha fechada.
+- `submitRequest` com cliente simulado: erro da função → `ok: false` sem protocolo; sucesso → protocolo; recusa "muitos envios" do banco vira a mensagem atual; origem ausente ainda falha fechada; o servidor não faz mais contagem própria antes de chamar o banco.
 
 Integração no banco, sem afetar dados da loja (cada teste dentro de uma transação que é desfeita no final — `BEGIN ... ROLLBACK`):
 - Pedido válido: grava pedido, itens, complementos, histórico e registro de envio.
@@ -96,6 +108,8 @@ Integração no banco, sem afetar dados da loja (cada teste dentro de uma transa
 - Idempotência: mesma chave com texto, item ou WhatsApp diferente é recusada e não cria pedido; mesma chave e conteúdo idêntico devolve o mesmo protocolo.
 - Campos proibidos: pacote com status, marcação de teste, observações internas, loja, autor ou campo desconhecido é recusado; pedido válido sempre nasce `recebido`, não teste, sem observações internas.
 - Concorrência: duas sessões simultâneas da mesma origem no limite (uma espera a trava da outra) — só uma grava; origens diferentes gravam em paralelo.
+- Limite x recuperação (cenário A): origem com o limite esgotado reenvia a mesma chave, conteúdo e origem de um pedido já gravado → recebe o mesmo protocolo, nenhuma linha nova, `submit_log` inalterado.
+- Limite x pedido novo (cenário B): mesma origem com o limite esgotado envia uma chave nova → recusa "muitos envios", nenhuma linha gravada.
 - Reenvio: com a origem no limite, a recuperação do pedido já gravado devolve o protocolo; a mesma chave e conteúdo de outra origem não devolve protocolo nem dado; após 24 horas a recuperação é recusada.
 
 Ponta a ponta na prévia: enviar um pedido pelo assistente, ver a confirmação, conferir no painel e marcá-lo como teste (admin). Este é o único registro novo criado.
