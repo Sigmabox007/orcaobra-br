@@ -33,11 +33,32 @@ O servidor continua fazendo, antes de chamar a função, todas as proteções at
 ### Protocolo só após gravação completa
 O protocolo é gerado dentro da função; ela só o devolve se tudo foi gravado. O servidor só retorna `ok: true` com protocolo após resposta sem erro; em qualquer erro, retorna a mensagem genérica atual. A tela de confirmação já depende desse retorno (será reconferido).
 
-### Reenvio sem duplicar
-- Nova coluna opcional `quote_requests.submission_key uuid` com índice único (aditiva, nula para os pedidos antigos).
-- O navegador gera uma chave por pedido no assistente e a reenvia em novas tentativas (clique duplo, rede instável).
-- Se a chave já existe, a função devolve o protocolo do pedido já gravado, sem criar outro nem contar novo envio.
+### Campos aceitos (validação no banco)
+A função lê do pacote só uma lista fechada de campos: nome, WhatsApp, observações do cliente, texto original, interpretação, esclarecimentos, itens, sugestões (id da regra, motivo, aceito), falha da IA, chave de envio, origem.
+- Qualquer campo fora da lista faz a função recusar o pacote inteiro.
+- Definidos sempre pelo banco, nunca pelo pacote: status `recebido`, marcação de teste falsa, observações internas vazias, datas de retorno vazias, loja (busca a piloto), data de consentimento (`now()`), autor do histórico vazio.
+- Limites de tamanho e quantidade conferidos de novo no banco (texto, até 30 itens, até 5 sugestões, até 3 esclarecimentos).
+- Sugestões: o nome do complemento vem da regra no banco, e só se ela estiver revisada e ativa; regra inválida recusa o pedido.
+- Nenhum campo de papel ou permissão existe no pacote; a função não toca em `user_roles`.
+
+### Reenvio sem duplicar (idempotência)
+- Novas colunas opcionais em `quote_requests` (aditivas, nulas nos pedidos antigos): `submission_key uuid` com índice único, `submission_hash text` (resumo SHA-256 do conteúdo do pedido) e `submission_origin text` (identificador de origem já com chave, igual ao de `submit_log`).
+- O navegador gera uma chave por pedido no assistente e a reenvia nas novas tentativas (clique duplo, conexão caiu).
+- O resumo é calculado dentro do banco a partir dos campos aceitos, em forma padronizada; o navegador não o informa.
+- Mesma chave + mesmo resumo + mesma origem: devolve o protocolo já gravado, sem criar outro.
+- Mesma chave com conteúdo diferente: recusa ("conflito"), sem gravar nem revelar nada.
+- Mesma chave e conteúdo vindos de outra origem: recusa com a mesma mensagem genérica, sem protocolo nem dados.
+- Recuperação só vale por 24 horas após a gravação.
 - Colisão de protocolo: tentado de novo dentro da função (até 5 vezes).
+
+### Limite de envios e concorrência
+Hoje existe condição de corrida: o servidor conta os envios da origem e só depois grava; duas solicitações simultâneas podem ler a mesma contagem e ambas passarem do limite.
+Correção dentro da Fase 0A: a conferência do limite passa para dentro da função transacional.
+1. Trava por origem durante a transação (`pg_advisory_xact_lock` sobre o identificador da origem): envios simultâneos da mesma origem passam um de cada vez.
+2. Com a trava, verifica primeiro se a chave já existe (recuperação, ver acima). Recuperação legítima não conta como envio e não é bloqueada pelo limite.
+3. Só então conta `submit_log` da última hora, lendo o limite atual de `app_settings` (valor não muda), e recusa se atingido.
+4. Grava pedido, itens, complementos, histórico e `submit_log`; a trava é liberada no fim.
+A conferência atual no servidor continua como primeira barreira (sem custo para o banco); a do banco é a definitiva. Origens diferentes não se bloqueiam entre si.
 
 ## 3. Efeito na versão publicada
 
@@ -72,6 +93,10 @@ Integração no banco, sem afetar dados da loja (cada teste dentro de uma transa
 - Falha simulada em cada etapa obrigatória (item inválido, complemento com regra inexistente, status inválido): nenhuma linha fica em nenhuma tabela.
 - Mesma chave enviada duas vezes: um só pedido, mesmo protocolo.
 - Permissões: como visitante anônimo e como usuário logado, chamar a função retorna "permissão negada".
+- Idempotência: mesma chave com texto, item ou WhatsApp diferente é recusada e não cria pedido; mesma chave e conteúdo idêntico devolve o mesmo protocolo.
+- Campos proibidos: pacote com status, marcação de teste, observações internas, loja, autor ou campo desconhecido é recusado; pedido válido sempre nasce `recebido`, não teste, sem observações internas.
+- Concorrência: duas sessões simultâneas da mesma origem no limite (uma espera a trava da outra) — só uma grava; origens diferentes gravam em paralelo.
+- Reenvio: com a origem no limite, a recuperação do pedido já gravado devolve o protocolo; a mesma chave e conteúdo de outra origem não devolve protocolo nem dado; após 24 horas a recuperação é recusada.
 
 Ponta a ponta na prévia: enviar um pedido pelo assistente, ver a confirmação, conferir no painel e marcá-lo como teste (admin). Este é o único registro novo criado.
 
@@ -81,7 +106,9 @@ Regressão: os 56 testes atuais; contagem de registros por tabela antes e depois
 
 - Banco compartilhado: mitigado por migração apenas aditiva.
 - Erro na função bloquearia novos pedidos na prévia: testado antes de publicar; a publicada segue no caminho antigo.
-- Chave de reenvio forjada não dá acesso a nada: só devolve o protocolo do mesmo envio, que o cliente já recebeu.
+- Chave de reenvio forjada não dá acesso a nada: exige o mesmo conteúdo completo e a mesma origem, e só devolve o protocolo.
+- Usuários atrás da mesma rede (mesma origem) passam a enviar um de cada vez; o atraso é de milissegundos.
+- Clientes cuja rede muda entre tentativas (Wi-Fi para 4G) não recuperam o protocolo: o reenvio é recusado e o pedido original continua gravado; a equipe o vê no painel. Risco aceito para não expor pedidos a outras origens.
 
 ## 7. Recuperação
 
