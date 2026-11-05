@@ -18,3 +18,6 @@
 - [x] Retenção de 6 meses dos registros de segurança — procedimento manual.
 - [x] Verificar retenção dos fornecedores de IA nas documentações oficiais.
 - [x] Build, testes, preservação dos dados e relatório curto.
+# Auditoria comercial
+- [x] Relatório e plano revisado salvos em docs/auditoria-comercial.md.
+- [ ] Fase 0 — aguardando aprovação.
