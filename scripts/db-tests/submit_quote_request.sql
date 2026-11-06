@@ -9,6 +9,9 @@ BEGIN;
 DO $$ BEGIN
   EXECUTE replace(pg_get_functiondef('public.submit_quote_request(jsonb)'::regprocedure),
                   'public.submit_quote_request', 'pg_temp.sq');
+  -- Same body with a zero-length recovery window, to test expiry without editing rows.
+  EXECUTE replace(replace(pg_get_functiondef('public.submit_quote_request(jsonb)'::regprocedure),
+                  'public.submit_quote_request', 'pg_temp.sq_expired'), 'interval ''24 hours''', 'interval ''0 seconds''');
 END $$;
 
 CREATE TEMP TABLE t_ok_rule AS SELECT id FROM association_rules WHERE reviewed AND active LIMIT 1;
@@ -87,10 +90,8 @@ BEGIN
   RAISE NOTICE 'ok  outra origem não recupera o pedido';
 
   -- Older than 24h: recovery refused.
-  UPDATE quote_requests SET created_at = now() - interval '25 hours' WHERE submission_key = k;
-  r2 := pg_temp.sq(pg_temp.base(k, o1));
+  r2 := pg_temp.sq_expired(pg_temp.base(k, o1));
   IF r2->>'status' <> 'rejected' OR r2 ? 'protocol' THEN RAISE EXCEPTION 'FAIL 24h: %', r2; END IF;
-  UPDATE quote_requests SET created_at = now() WHERE submission_key = k;
   RAISE NOTICE 'ok  recuperação recusada após 24 horas';
 
   -- Scenario A: origin at its limit can still recover its own order.
