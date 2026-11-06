@@ -19,7 +19,6 @@ DECLARE
     $$category = 'x'$$, $$ai_failed = NOT ai_failed$$, $$protocol = 'OO-ZZZZ-ZZZZ'$$, $$store_id = NULL$$,
     $$consent_at = now() - interval '1 day'$$, $$is_test = NOT is_test$$, $$submission_key = gen_random_uuid()$$,
     $$submission_hash = 'x'$$, $$submission_origin = 'x'$$, $$created_at = now() - interval '1 day'$$];
-  PROCEDURE_DUMMY int;
 BEGIN
   -- Fixture: fictitious users + one fictitious order.
   INSERT INTO auth.users (id, email, aud, role) VALUES
@@ -144,6 +143,6 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN ok := ok+1; END;
   RESET ROLE;
 
-  RAISE EXCEPTION 'RESULT ok=% fail=%%', ok, bad, report;
+  RAISE EXCEPTION 'RESULT ok=% fail=% %', ok, bad, report;
 END
 $t$;
