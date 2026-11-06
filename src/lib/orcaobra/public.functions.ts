@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { MAX_TEXT, MAX_QUESTIONS, eligibleRules, generateProtocol, normalizeWhatsapp, sanitizeSuggestions, buildRequestItems } from "./rules";
+import { MAX_TEXT, MAX_QUESTIONS, eligibleRules, sanitizeSuggestions } from "./rules";
+import { runSubmit } from "./submit";
+import type { Json } from "@/integrations/supabase/types";
 
 const sessionId = z.string().min(8).max(64);
 
@@ -96,73 +98,20 @@ export type SubmitInput = z.input<typeof submitSchema>;
 export const submitRequest = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => submitSchema.parse(d))
   .handler(async ({ data }) => {
-    const phone = normalizeWhatsapp(data.whatsapp);
-    if (!phone) return { ok: false as const, error: "Informe um WhatsApp válido com DDD." };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { originHash } = await import("./ai.server");
-    const origin = await originHash().catch(() => null);
-    if (!origin) {
-      console.error("origin id unavailable", "origin_secret_missing");
-      return { ok: false as const, error: "Não foi possível registrar agora. Tente novamente." };
-    }
-    const { data: settings } = await supabaseAdmin.from("app_settings").select("submits_per_origin_hour").eq("id", 1).single();
-    const { count } = await supabaseAdmin
-      .from("submit_log")
-      .select("id", { count: "exact", head: true })
-      .eq("origin_hash", origin)
-      .gte("created_at", new Date(Date.now() - 3600_000).toISOString());
-    if ((count ?? 0) >= (settings?.submits_per_origin_hour ?? 5))
-      return { ok: false as const, error: "Muitos envios em pouco tempo. Tente novamente mais tarde." };
-
-    const { data: store } = await supabaseAdmin.from("stores").select("id").limit(1).single();
-    // Only accept suggestions that point at reviewed, active rules.
-    const ruleIds = data.suggestions.map((s) => s.rule_id);
-    const { data: okRules } = ruleIds.length
-      ? await supabaseAdmin.from("association_rules").select("id, complement").in("id", ruleIds).eq("reviewed", true).eq("active", true)
-      : { data: [] as { id: string; complement: string }[] };
-    const valid = new Map((okRules ?? []).map((r) => [r.id, r.complement]));
-     const suggestions = data.suggestions.flatMap((s) => {
-       const name = valid.get(s.rule_id);
-       return name ? [{ ...s, name }] : [];
-     });
-
-    let protocol = "";
-    let requestId = "";
-    for (let i = 0; i < 3 && !requestId; i++) {
-      protocol = generateProtocol();
-      const { data: row, error } = await supabaseAdmin
-        .from("quote_requests")
-        .insert({
-          store_id: store?.id ?? null,
-          protocol,
-          customer_name: data.name,
-          customer_whatsapp: phone,
-          customer_notes: data.notes || null,
-          consent_at: new Date().toISOString(),
-          original_text: data.originalText,
-          ai_interpretation: data.interpretation,
-          clarifications: data.clarifications,
-          category: data.interpretation?.category ?? null,
-          ai_failed: data.aiFailed,
-        })
-        .select("id")
-        .single();
-      if (row) requestId = row.id;
-      else if (error && error.code !== "23505") {
-        // Log only the error code: Postgres "details" can echo the full row (name, WhatsApp, order text).
-        console.error("submit insert failed", error.code);
-        return { ok: false as const, error: "Não foi possível registrar agora. Tente novamente." };
-      }
-    }
-    if (!requestId) return { ok: false as const, error: "Não foi possível registrar agora. Tente novamente." };
-
-    const items = buildRequestItems(data.items, suggestions).map((i) => ({ ...i, request_id: requestId }));
-    if (items.length) await supabaseAdmin.from("request_items").insert(items);
-    if (suggestions.length)
-      await supabaseAdmin
-        .from("suggested_complements")
-        .insert(suggestions.map((s) => ({ request_id: requestId, rule_id: s.rule_id, name: s.name, reason: s.reason, accepted: s.accepted })));
-    await supabaseAdmin.from("status_history").insert({ request_id: requestId, to_status: "recebido", note: "Pedido enviado pelo cliente" });
-    await supabaseAdmin.from("submit_log").insert({ origin_hash: origin });
-    return { ok: true as const, protocol };
+    // Single transactional database call: order, items, complements, history and submit log
+    // are written together or not at all. Rate limit and retry recovery are decided there.
+    return runSubmit(data, {
+      origin: originHash,
+      allowedRuleIds: async (ids) => {
+        const { data: rows } = await supabaseAdmin.from("association_rules").select("id").in("id", ids).eq("reviewed", true).eq("active", true);
+        return new Set((rows ?? []).map((r) => r.id));
+      },
+      rpc: async (payload) => {
+        const { data: res, error } = await supabaseAdmin.rpc("submit_quote_request", { payload: payload as unknown as Json });
+        return { data: res, error: error ? { code: error.code } : null };
+      },
+      log: (msg, code) => console.error(msg, code),
+    });
   });
