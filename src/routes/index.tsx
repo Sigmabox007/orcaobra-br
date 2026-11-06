@@ -163,8 +163,10 @@ function Index() {
           submissionKey: getSubmissionKey(),
         },
       });
-      if (!r.ok) return setError(r.error);
+      // A definitive answer from the server (success or refusal) ends this attempt; only a
+      // lost connection keeps the key so the retry recovers the same protocol.
       sessionStorage.removeItem("oo_submit_key");
+      if (!r.ok) return setError(r.error);
       sessionStorage.setItem(
         "oo_last",
         JSON.stringify({ protocol: r.protocol, items: items.filter((i) => i.name.trim()).length + suggestions.filter((s) => s.accepted).length }),
