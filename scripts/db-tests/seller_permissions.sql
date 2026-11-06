@@ -1,4 +1,5 @@
 -- Fase 0B: seller / admin / anon permission tests on the live schema.
+-- STATUS: NOT EXECUTED (no transactional test session with SET ROLE available; see relatorio-fase-0b.md).
 -- Needs a privileged session (to create a fictitious auth user and SET ROLE).
 -- Everything runs in one DO block that ALWAYS ends with RAISE EXCEPTION, so the whole
 -- transaction is rolled back: the fictitious users, order and changes never persist.

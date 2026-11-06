@@ -15,7 +15,7 @@
 - Pure business rules (limits, suggestion cap, masking, indicators) live in `src/lib/orcaobra/rules.ts` with tests beside it. Why: one tested source of truth.
 - AI receives only order text/answers, built solely in `src/lib/orcaobra/ai-prompts.ts` with `maskContacts`, and may only pick reviewed+active rule ids. Why: privacy promises on /privacidade must stay testable; no invented products.
 - Server logs never include raw database error details or customer fields; log codes only. Why: Postgres details can echo whole rows with contacts.
-- Database triggers guard test classification changes and invalidate reviewed rule content on edits. Why: browser controls cannot enforce authorization or approval invariants.
+- Database triggers guard test classification changes, limit non-admin order updates to status/internal notes/follow-up dates (`guard_staff_request_update`, exception only for service_role), and invalidate reviewed rule content on edits. Why: browser controls cannot enforce authorization or approval invariants.
 - Requested products and service descriptions are distinct; stored clarifications are the source for unanswered questions. Why: avoid invented line items and redundant AI calls.
 - Abuse-limit origin ids are HMAC-SHA256 (`originId` in `rules.ts`) keyed by the `ORIGIN_HASH_SECRET` env secret, failing closed when it is missing. Why: an unkeyed IP hash can be reversed by guessing IPs.
 - Deleting a real order goes only through `deleteQuoteRequest` in `src/lib/orcaobra/admin.functions.ts` (admin re-check, exact protocol, caller's RLS, cascades to child tables); never add automatic deletion. Why: irreversible action needs server-side authorization and explicit human confirmation.
