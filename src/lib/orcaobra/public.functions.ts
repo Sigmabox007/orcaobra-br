@@ -88,6 +88,7 @@ const submitSchema = z.object({
     .array(z.object({ rule_id: z.string().uuid(), name: z.string().max(120), reason: z.string().max(240), accepted: z.boolean() }))
     .max(5),
   aiFailed: z.boolean(),
+  submissionKey: z.string().uuid(),
 });
 
 export type SubmitInput = z.input<typeof submitSchema>;

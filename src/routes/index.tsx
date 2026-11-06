@@ -46,6 +46,16 @@ function getSessionId() {
   return id;
 }
 
+/** One key per order attempt; reused on retries so the database can return the same protocol. */
+function getSubmissionKey() {
+  let id = sessionStorage.getItem("oo_submit_key");
+  if (!id) {
+    id = crypto.randomUUID();
+    sessionStorage.setItem("oo_submit_key", id);
+  }
+  return id;
+}
+
 function Index() {
   const navigate = useNavigate();
   const interpretFn = useServerFn(interpretRequest);
@@ -150,9 +160,11 @@ function Index() {
           items: items.filter((i) => i.name.trim()),
           suggestions,
           aiFailed: aiFailed || !interp,
+          submissionKey: getSubmissionKey(),
         },
       });
       if (!r.ok) return setError(r.error);
+      sessionStorage.removeItem("oo_submit_key");
       sessionStorage.setItem(
         "oo_last",
         JSON.stringify({ protocol: r.protocol, items: items.filter((i) => i.name.trim()).length + suggestions.filter((s) => s.accepted).length }),
