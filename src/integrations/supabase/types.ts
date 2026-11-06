@@ -174,6 +174,9 @@ export type Database = {
           protocol: string
           status: Database["public"]["Enums"]["request_status"]
           store_id: string | null
+          submission_hash: string | null
+          submission_key: string | null
+          submission_origin: string | null
           updated_at: string
         }
         Insert: {
@@ -195,6 +198,9 @@ export type Database = {
           protocol: string
           status?: Database["public"]["Enums"]["request_status"]
           store_id?: string | null
+          submission_hash?: string | null
+          submission_key?: string | null
+          submission_origin?: string | null
           updated_at?: string
         }
         Update: {
@@ -216,6 +222,9 @@ export type Database = {
           protocol?: string
           status?: Database["public"]["Enums"]["request_status"]
           store_id?: string | null
+          submission_hash?: string | null
+          submission_key?: string | null
+          submission_origin?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -419,6 +428,7 @@ export type Database = {
         Returns: boolean
       }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
+      submit_quote_request: { Args: { payload: Json }; Returns: Json }
     }
     Enums: {
       app_role: "admin" | "seller"

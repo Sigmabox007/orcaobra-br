@@ -46,6 +46,16 @@ function getSessionId() {
   return id;
 }
 
+/** One key per order attempt; reused on retries so the database can return the same protocol. */
+function getSubmissionKey() {
+  let id = sessionStorage.getItem("oo_submit_key");
+  if (!id) {
+    id = crypto.randomUUID();
+    sessionStorage.setItem("oo_submit_key", id);
+  }
+  return id;
+}
+
 function Index() {
   const navigate = useNavigate();
   const interpretFn = useServerFn(interpretRequest);
@@ -150,8 +160,12 @@ function Index() {
           items: items.filter((i) => i.name.trim()),
           suggestions,
           aiFailed: aiFailed || !interp,
+          submissionKey: getSubmissionKey(),
         },
       });
+      // A definitive answer from the server (success or refusal) ends this attempt; only a
+      // lost connection keeps the key so the retry recovers the same protocol.
+      sessionStorage.removeItem("oo_submit_key");
       if (!r.ok) return setError(r.error);
       sessionStorage.setItem(
         "oo_last",
