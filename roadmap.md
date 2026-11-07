@@ -21,3 +21,8 @@
 # Auditoria comercial
 - [x] Relatório e plano revisado salvos em docs/auditoria-comercial.md.
 - [ ] Fase 0 — aguardando aprovação.
+## Fase 1 — preparação do banco
+- [x] Registrar confirmação do proprietário da exportação atualizada, baixada e guardada; restauração não testada.
+- [x] Apresentar o SQL da Fase 1 para autorização antes de aplicar.
+- [ ] Aplicar exclusivamente a migração da Fase 1 — depende da autorização do SQL.
+- [ ] Conferir contagens, integridade, administradores, gravações e regressão; emitir relatório sem publicação.
