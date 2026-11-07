@@ -21,6 +21,7 @@ export type Database = {
           kind: string
           origin_hash: string
           session_id: string | null
+          store_id: string | null
           success: boolean
         }
         Insert: {
@@ -29,6 +30,7 @@ export type Database = {
           kind: string
           origin_hash: string
           session_id?: string | null
+          store_id?: string | null
           success: boolean
         }
         Update: {
@@ -37,9 +39,18 @@ export type Database = {
           kind?: string
           origin_hash?: string
           session_id?: string | null
+          store_id?: string | null
           success?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       app_settings: {
         Row: {
@@ -87,6 +98,7 @@ export type Database = {
           reviewed: boolean
           reviewed_at: string | null
           reviewed_by: string | null
+          store_id: string | null
           trigger: string
           updated_at: string
         }
@@ -102,6 +114,7 @@ export type Database = {
           reviewed?: boolean
           reviewed_at?: string | null
           reviewed_by?: string | null
+          store_id?: string | null
           trigger: string
           updated_at?: string
         }
@@ -117,10 +130,19 @@ export type Database = {
           reviewed?: boolean
           reviewed_at?: string | null
           reviewed_by?: string | null
+          store_id?: string | null
           trigger?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "association_rules_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       followups: {
         Row: {
