@@ -13,14 +13,16 @@ Somente planejamento. Nada é executado sem aprovação explícita.
 
 ## 2. Decisão por tabela
 
-| Tabela | store_id? | Justificativa |
-|---|---|---|
-| association_rules | **Sim** | Regras de complementos serão por loja (definido na auditoria). |
-| ai_usage | **Sim** | Necessário para medir uso por loja (Fase 5). O teto diário global continua contando todas as linhas, sem filtro. |
-| app_settings | **Não agora** | Linha única (`id = 1`) que mistura controles globais (teto diário, liga/desliga, limites por origem) e futuros por loja. Pôr `store_id` nela fingiria ser por loja sem ser. Na Fase 5 cria-se uma tabela própria de configurações por loja; esta continua global. |
-| submit_log | **Não** | Proteção contra abuso por origem — decidido que permanece global. Tabela fechada, só a função de envio grava. |
-| request_items, suggested_complements, status_history, followups | **Não** | Cada linha tem `request_id` NOT NULL com FK para `quote_requests`; a loja vem do pedido, sem possibilidade de divergir. Duplicar criaria risco de inconsistência sem benefício. As políticas da Fase 3 consultarão a loja pelo pedido. |
-| quote_requests | já tem | Só recebe um DEFAULT (ver seção 3). |
+
+| Tabela                                                          | store_id?     | Justificativa                                                                                                                                                                                                                                                     |
+| --------------------------------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| association_rules                                               | **Sim**       | Regras de complementos serão por loja (definido na auditoria).                                                                                                                                                                                                    |
+| ai_usage                                                        | **Sim**       | Necessário para medir uso por loja (Fase 5). O teto diário global continua contando todas as linhas, sem filtro.                                                                                                                                                  |
+| app_settings                                                    | **Não agora** | Linha única (`id = 1`) que mistura controles globais (teto diário, liga/desliga, limites por origem) e futuros por loja. Pôr `store_id` nela fingiria ser por loja sem ser. Na Fase 5 cria-se uma tabela própria de configurações por loja; esta continua global. |
+| submit_log                                                      | **Não**       | Proteção contra abuso por origem — decidido que permanece global. Tabela fechada, só a função de envio grava.                                                                                                                                                     |
+| request_items, suggested_complements, status_history, followups | **Não**       | Cada linha tem `request_id` NOT NULL com FK para `quote_requests`; a loja vem do pedido, sem possibilidade de divergir. Duplicar criaria risco de inconsistência sem benefício. As políticas da Fase 3 consultarão a loja pelo pedido.                            |
+| quote_requests                                                  | já tem        | Só recebe um DEFAULT (ver seção 3).                                                                                                                                                                                                                               |
+
 
 Total: 2 colunas novas (`association_rules.store_id`, `ai_usage.store_id`) e 1 default.
 
@@ -63,19 +65,19 @@ COMMENT ON COLUMN public.association_rules.store_id IS 'Loja dona da regra. Defa
 COMMENT ON COLUMN public.ai_usage.store_id IS 'Loja atribuída ao uso. Default temporário = piloto. Teto global ignora esta coluna.';
 ```
 
-Uma única migração, numa transação: ou tudo entra, ou nada. As tabelas são pequenas; travas duram milissegundos.
+Uma única migração, numa transação: ou tudo entra, ou nada.  As tabelas são pequenas, mas o tempo de bloqueio não é garantido. Aplicar um limite curto de espera pelas travas e interromper a migração caso seja excedido, sem alterações parciais.
 
 ## 5. Ordem de execução
 
-1. Pré-requisitos: confirmar backup recente e restaurável; registrar contagens de todas as 11 tabelas (incluindo as não alteradas) e a lista de usuários de `user_roles`.
+1. Pré-requisitos: confirmar exportação atualizada, baixada e verificada quanto à integridade básica do arquivo; registrar que a restauração ainda não foi testada; registrar contagens de todas as 11 tabelas (incluindo as não alteradas) e a lista de usuários de `user_roles`.
 2. Aplicar a migração.
 3. Conferências (consultas só leitura):
-   - contagens idênticas às do passo 1 (ou maiores apenas por pedidos/uso novos legítimos, conferidos pela data);
-   - `store_id IS NULL` = 0 em association_rules, ai_usage, quote_requests;
-   - nenhum `store_id` que não exista em `stores`;
-   - conteúdo das regras inalterado: `reviewed`, `active`, `reviewed_at` iguais (3 ativas/revisadas continuam);
-   - filhos órfãos = 0 (itens, complementos, histórico, retornos sem pedido);
-   - André e Ariane continuam com papel admin.
+  - contagens idênticas às do passo 1 (ou maiores apenas por pedidos/uso novos legítimos, conferidos pela data);
+  - `store_id IS NULL` = 0 em association_rules, ai_usage, quote_requests;
+  - nenhum `store_id` que não exista em `stores`;
+  - conteúdo das regras inalterado: `reviewed`, `active`, `reviewed_at` iguais (3 ativas/revisadas continuam);
+  - filhos órfãos = 0 (itens, complementos, histórico, retornos sem pedido);
+  - André e Ariane continuam com papel admin.
 4. Teste de gravação: um pedido de teste pela prévia (marcado como teste) e uma análise de IA; ambos com a loja piloto.
 5. `bunx vitest run` (69+ passando) e build.
 6. Relatório `relatorio-fase-1.md`. Sem publicação.
@@ -87,14 +89,9 @@ Uma única migração, numa transação: ou tudo entra, ou nada. As tabelas são
 - **"Primeira loja" na função de envio**: mesmo risco; correção obrigatória na Fase 4.
 - **Pedido novo durante a migração**: coberto pelo default e pela transação; nenhum insert falha.
 
-## 7. Recuperação (segundos, sem perda de dados)
+## 7. Recuperação segura
 
-```sql
-ALTER TABLE public.quote_requests ALTER COLUMN store_id DROP DEFAULT;
-ALTER TABLE public.association_rules DROP CONSTRAINT association_rules_store_id_fkey;
-ALTER TABLE public.ai_usage DROP CONSTRAINT ai_usage_store_id_fkey;
--- colunas podem permanecer (o código não as usa); remoção só com sua autorização
-```
+A migração será executada em uma única transação. Se qualquer etapa falhar, todas as alterações da migração deverão ser revertidas automaticamente. Caso a migração seja concluída e posteriormente apresente algum problema, não remover automaticamente colunas, chaves estrangeiras, registros ou outras proteções. O Lovable deverá apresentar o diagnóstico e uma proposta de correção ou reversão para aprovação de André. Nenhuma operação de recuperação será executada sem nova autorização explícita.
 
 ## 8. Critérios de aceitação
 
@@ -108,3 +105,15 @@ ALTER TABLE public.ai_usage DROP CONSTRAINT ai_usage_store_id_fkey;
 ## Fora do escopo
 
 Criação de lojas, equipe por loja, RLS por loja, rotas por loja, configurações por loja, mudança na função de envio, telas, cobrança e planos.
+
+## 9. Condições adicionais de segurança para aprovação
+
+1. Confirmar uma exportação atualizada do banco antes da migração. Não afirmar que a restauração foi testada sem evidência.
+
+2. Configurar um tempo limite curto para obtenção das travas da migração. Se houver bloqueio prolongado, interromper a operação sem alterações parciais.
+
+3. Não remover chaves estrangeiras ou colunas automaticamente como procedimento de recuperação. Preservar as proteções de integridade; qualquer remoção exige autorização.
+
+4. Registrar que DEFAULT em coluna anulável não impede inserções com NULL explícito. Verificar os caminhos atuais de gravação e documentar esse risco temporário.
+
+5. Não executar scripts de testes como migrações. A migração deverá conter apenas as alterações estruturais aprovadas. Não publicar o site.
