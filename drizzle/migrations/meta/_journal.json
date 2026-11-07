@@ -29,6 +29,13 @@
       "when": 1793988027907,
       "tag": "0003_guard_staff_request_update",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794015609291,
+      "tag": "0004_phase1_pilot_store_attribution",
+      "breakpoints": true
     }
   ]
 }

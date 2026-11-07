@@ -24,5 +24,6 @@
 ## Fase 1 — preparação do banco
 - [x] Registrar confirmação do proprietário da exportação atualizada, baixada e guardada; restauração não testada.
 - [x] Apresentar o SQL da Fase 1 para autorização antes de aplicar.
-- [ ] Aplicar exclusivamente a migração da Fase 1 — depende da autorização do SQL.
-- [ ] Conferir contagens, integridade, administradores, gravações e regressão; emitir relatório sem publicação.
+- [x] Aplicar exclusivamente a migração da Fase 1 após autorização do SQL.
+- [x] Conferir contagens, integridade, administradores, gravações e regressão; emitir relatório sem publicação.
+- [ ] Testes reais de vendedor da Fase 0B — dependem de conta de vendedor e autorização do procedimento; não executados nesta fase.
