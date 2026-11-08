@@ -1,129 +1,147 @@
-# Pré-Fase 3 — Revogação segura dos vínculos de usuários à loja
+# Pré-Fase 3 (revisão 1) — Revogação segura dos vínculos de usuários à loja
 
-Somente planejamento. Nada aplicado, nenhum dado alterado, nada publicado. Implementação só com aprovação explícita de André, etapa por etapa.
+Somente planejamento. Nada aplicado, nenhum dado alterado, nada publicado. A Fase 3 não começa sem nova auditoria e aprovação explícita de André.
 
-## 1. Diagnóstico (lido agora, 08/11)
+Arquitetura geral mantida. Alterações desta revisão: itens 1 a 7 do pedido, marcados como [R1]…[R7].
 
-- `store_members`: 2 linhas (André e Ariane, admin, loja piloto). Colunas id, user_id (sem chave estrangeira), store_id (RESTRICT), role, created_at; único (user_id, store_id). Anônimo sem permissão; logado só leitura; uma política: cada um lê o próprio vínculo, admin lê todos. **Nada usa a tabela ainda.**
-- `user_roles`: fonte oficial; referência a `auth.users` com exclusão em cascata; sem escrita pelo app.
-- `has_role` / `is_staff`: SECURITY DEFINER, leem só `user_roles`, **sem noção de loja**. Ambas aceitam qualquer user_id (risco P2 já registrado).
-- 19 políticas: 18 usam `is_staff`/`has_role` sem filtro de loja; a de `store_members` também. Logo, hoje **qualquer funcionário vê tudo**; com uma só loja, isso é aceitável.
-- Painel: a tela confere sessão e lê `user_roles` no navegador (apenas para exibir menus). A proteção real é o RLS. Exclusão de pedido passa por `deleteQuoteRequest` (servidor, sessão do próprio usuário).
-- Regra da plataforma: novas tabelas não podem referenciar `auth.users`; gatilhos em `auth.users` só são permitidos para cadastro/confirmação, **não para exclusão**.
+## 1. Diagnóstico (leitura feita em 08/11)
 
-Ponto central: o token (JWT) só informa **quem** é a pessoa (`auth.uid()`). Se toda política consultar o banco em cada requisição, revogar no banco corta o acesso na hora, mesmo com sessão ou token antigos.
+- `store_members`: 2 linhas (André e Ariane, admin, piloto); `user_id` sem chave estrangeira; único (user_id, store_id); anônimo sem permissão; logado só leitura. Nada usa a tabela.
+- `user_roles`: fonte oficial; `has_role`/`is_staff` sem noção de loja.
+- 19 políticas: 18 usam `is_staff`/`has_role`; a de `store_members` também usa `has_role`.
+- Painel: a tela lê `user_roles` só para montar menus; a proteção real é o RLS.
+- [R5] Verificado por leitura: `auth.users` tem `id`, `deleted_at` e `banned_until`; as funções atuais pertencem ao dono `postgres`, que tem leitura em `auth.users`; `anon` e `authenticated` **não** têm nenhuma permissão direta em `auth.users`. Portanto uma função SECURITY DEFINER de dono `postgres` consegue consultar essas colunas sem conceder nada novo a ninguém. **Ainda não confirmado:** que a função criada pela migração terá o mesmo dono — isso vira verificação obrigatória da etapa 3.
+- [R6] O prazo de validade dos tokens **não foi confirmado** na configuração. O plano não depende dele: o token só identifica a pessoa; a permissão é decidida no banco a cada consulta.
 
-## 2. Alternativas comparadas
+## 2. Decisões (inalteradas, salvo marcações)
 
-| Tema | Alternativa | Avaliação |
-|---|---|---|
-| Revogação | A. Apagar a linha do vínculo | Imediato, mas perde histórico de quem revogou |
-| | **B. Marcar `revoked_at` / `revoked_by` (recomendado)** | Imediato e auditável; vínculo revogado nunca vale |
-| | C. Papéis/loja dentro do JWT | Rejeitado: token antigo continuaria valendo até expirar |
-| Conta excluída | A. Gatilho em `auth.users` ao excluir | Rejeitado: contraria a regra da plataforma |
-| | **B. Função de acesso confere que a conta existe e não está bloqueada (recomendado)** | Funciona mesmo com exclusão por ferramenta administrativa (cenário 8) |
-| | C. Só limpeza periódica | Insuficiente sozinha: há janela entre exclusão e limpeza |
-| Órfãos | **Limpeza periódica que apenas marca `revoked_at` com motivo "conta inexistente"** + relatório | Segurança não depende dela; serve para higiene e auditoria |
-| Divergência | **`store_members` passa a ser a fonte do acesso por loja; `user_roles` deixa de dar acesso a dados de loja** (detalhes na etapa 5) | Evita duas fontes de verdade |
-| Gestão de vínculos | **Somente por funções do banco chamadas pelo servidor com a sessão do próprio admin** | Nunca usa a chave de serviço no navegador; a regra de "mesma loja" fica no banco |
+- Revogação por marcação auditável, nunca por apagar linha.
+- Uma única função decide o acesso por loja, sempre sobre o próprio usuário (`auth.uid()`), conferindo vínculo ativo, conta existente, não excluída e não bloqueada.
+- Sem gatilho em `auth.users`; sem referência a `auth.users`; sem chave de serviço no navegador.
+- Gestão de vínculos só por funções do banco, chamadas pelo servidor com a sessão do próprio admin.
+- [R3] **Histórico separado do estado:** `store_members` guarda o estado atual (uma linha por pessoa/loja, mantendo o `UNIQUE`); uma tabela nova somente de inclusão, `store_member_events`, guarda cada concessão, revogação e reativação. Reativar atualiza a linha atual e **acrescenta** um evento; nada de auditoria é apagado ou sobrescrito. Alternativa descartada: trocar o `UNIQUE` por índice parcial e criar novas linhas — funciona, mas espalha o histórico e complica a conferência com `user_roles`.
+- [R7] **Limpeza de órfãos sem credencial nova:** função de banco executável só por `service_role`, chamada por uma rotina agendada interna que usa o mecanismo de agendamento da plataforma com seu próprio segredo dedicado (`LOVABLE_CRON_SECRET`, já existente e independente). **O segredo de HMAC das origens (`ORIGIN_HASH_SECRET`) nunca é usado para isso.** Se esse agendamento não for adequado, alternativa: execução manual pelo proprietário. A limpeza é só higiene; a segurança não depende dela.
 
-## 3. Estrutura e SQL proposto (para revisão, não aplicar)
+## 3. SQL proposto (para revisão, não aplicar)
+
+[R1] Todas as funções: `SECURITY DEFINER`, `SET search_path = ''`, objetos qualificados por esquema, `REVOKE ALL ... FROM PUBLIC, anon, authenticated` seguido de `GRANT EXECUTE` só a quem precisa.
 
 ```sql
--- Etapa 2: revogação auditável (aditiva)
+-- Etapa 2: estado e histórico (aditivo)
 ALTER TABLE public.store_members
   ADD COLUMN revoked_at timestamptz,
   ADD COLUMN revoked_by uuid,
   ADD COLUMN revoke_reason text CHECK (revoke_reason IN ('manual','conta_inexistente'));
-CREATE INDEX store_members_active_idx ON public.store_members (user_id, store_id) WHERE revoked_at IS NULL;
+CREATE INDEX store_members_active_idx ON public.store_members (store_id, user_id) WHERE revoked_at IS NULL;
 
--- Etapa 3: única função que decide acesso por loja (estado atual do banco)
+CREATE TABLE public.store_member_events (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  member_id  uuid NOT NULL REFERENCES public.store_members(id) ON DELETE RESTRICT,
+  store_id   uuid NOT NULL REFERENCES public.stores(id) ON DELETE RESTRICT,
+  user_id    uuid NOT NULL,
+  action     text NOT NULL CHECK (action IN ('concedido','revogado','reativado','papel_alterado','orfao_marcado')),
+  role       public.app_role NOT NULL,
+  actor_id   uuid,               -- NULL = rotina de sistema
+  reason     text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+REVOKE ALL ON TABLE public.store_member_events FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.store_member_events TO authenticated;
+GRANT ALL ON public.store_member_events TO service_role;
+ALTER TABLE public.store_member_events ENABLE ROW LEVEL SECURITY;
+-- política de leitura (admin da mesma loja) criada só na etapa 5, junto com as demais
+-- os 2 vínculos atuais recebem um evento 'concedido' de origem (actor_id NULL, reason 'Fase 2')
+
+-- Etapa 3: decisão de acesso
 CREATE FUNCTION public.can_access_store(_store uuid, _min_role public.app_role DEFAULT 'seller')
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.store_members m
     JOIN auth.users u ON u.id = m.user_id
-    WHERE m.user_id = auth.uid()          -- sempre o próprio usuário, sem parâmetro de terceiros
-      AND m.store_id = _store
-      AND m.revoked_at IS NULL
+    WHERE m.user_id = auth.uid() AND m.store_id = _store AND m.revoked_at IS NULL
       AND u.deleted_at IS NULL
-      AND (u.banned_until IS NULL OR u.banned_until < now())
-      AND (_min_role = 'seller' OR m.role = 'admin')
-  )
+      AND (u.banned_until IS NULL OR u.banned_until <= now())
+      AND (_min_role = 'seller'::public.app_role OR m.role = 'admin'::public.app_role))
 $$;
-REVOKE ALL ON FUNCTION public.can_access_store(uuid, public.app_role) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.can_access_store(uuid, public.app_role) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.can_access_store(uuid, public.app_role) TO authenticated;
 
--- Etapa 4: gestão de vínculos (admin só da própria loja)
+-- Etapa 4: gestão (corpo resumido; mesmas regras de search_path e grants)
 CREATE FUNCTION public.revoke_store_member(_member uuid) RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_store uuid; v_user uuid;
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE v public.store_members%ROWTYPE; v_admins int;
 BEGIN
-  SELECT store_id, user_id INTO v_store, v_user FROM store_members WHERE id = _member AND revoked_at IS NULL FOR UPDATE;
-  IF v_store IS NULL OR NOT public.can_access_store(v_store, 'admin') THEN
+  SELECT * INTO v FROM public.store_members WHERE id = _member;
+  IF NOT FOUND OR NOT public.can_access_store(v.store_id, 'admin'::public.app_role) THEN
     RAISE EXCEPTION 'not_allowed' USING ERRCODE = '42501';
   END IF;
-  IF (SELECT count(*) FROM store_members WHERE store_id = v_store AND role = 'admin' AND revoked_at IS NULL) = 1
-     AND EXISTS (SELECT 1 FROM store_members WHERE id = _member AND role = 'admin') THEN
-    RAISE EXCEPTION 'last_admin' USING ERRCODE = '42501';  -- nunca deixar a loja sem admin
+  -- [R2] trava única por loja: toda mudança de vínculo da mesma loja passa por aqui em fila
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('oo_members:' || v.store_id::text, 0));
+  SELECT * INTO v FROM public.store_members WHERE id = _member AND revoked_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0002'; END IF;
+  IF v.role = 'admin'::public.app_role THEN
+    -- conta só admins VÁLIDOS (conta existente, não bloqueada), relida depois da trava
+    SELECT count(*) INTO v_admins FROM public.store_members m JOIN auth.users u ON u.id = m.user_id
+     WHERE m.store_id = v.store_id AND m.role = 'admin'::public.app_role AND m.revoked_at IS NULL
+       AND u.deleted_at IS NULL AND (u.banned_until IS NULL OR u.banned_until <= now());
+    IF v_admins <= 1 THEN RAISE EXCEPTION 'last_admin' USING ERRCODE = '42501'; END IF;
   END IF;
-  UPDATE store_members SET revoked_at = now(), revoked_by = auth.uid(), revoke_reason = 'manual' WHERE id = _member;
+  UPDATE public.store_members SET revoked_at = now(), revoked_by = auth.uid(), revoke_reason = 'manual' WHERE id = _member;
+  INSERT INTO public.store_member_events (member_id, store_id, user_id, action, role, actor_id)
+  VALUES (v.id, v.store_id, v.user_id, 'revogado', v.role, auth.uid());
 END $$;
--- grant_store_member(_store, _user, _role): mesma checagem de admin da loja;
--- o usuário precisa existir em auth.users; reativar = nova linha ou limpar revoked_at, sempre registrado.
+REVOKE ALL ON FUNCTION public.revoke_store_member(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.revoke_store_member(uuid) TO authenticated;
+
+-- grant_store_member(_store, _user, _role): mesma trava por loja; exige admin da loja e conta válida;
+--   sem linha → INSERT + evento 'concedido'; linha revogada → limpa revoked_* + evento 'reativado'
+--   (o histórico fica nos eventos); mudança de papel admin→seller também passa pela regra do último admin.
+-- mark_orphan_members(): EXECUTE só para service_role; marca revoke_reason='conta_inexistente' + evento.
 ```
 
-Políticas da Fase 3 (exemplo, aplicado só depois): `USING (public.can_access_store(store_id))` em pedidos e regras; tabelas filhas via `EXISTS` no pedido; `store_members` visível só para admin da mesma loja. Escrita direta em `store_members` continua proibida a logados.
+[R2] Por que resolve a concorrência: as duas revogações simultâneas da mesma loja disputam a mesma trava; a segunda só continua depois que a primeira termina, e reconta os admins já vendo a revogação anterior — então recusa com `last_admin`. Concessões e mudanças de papel usam a mesma trava.
 
-## 4. Cenários obrigatórios
+## 4. [R4] Transição das políticas — aviso expresso
 
-| # | Cenário | Resultado esperado |
-|---|---|---|
-| 1 | Removido de uma loja | `revoked_at` preenchido → próxima requisição recusada |
-| 2 | Duas lojas, removido de uma | Só o vínculo daquela loja é revogado; a outra continua |
-| 3 | Conta excluída | Junção com `auth.users` falha → sem acesso; limpeza marca órfão depois |
-| 4 | Sessão aberta | Cada consulta reavalia o banco → recusada imediatamente |
-| 5 | Token ainda válido | Token só identifica; permissão vem do banco → recusada |
-| 6 | Pedido de outra loja | Política filtra por `store_id` → 0 linhas |
-| 7 | Admin mexendo em outra loja | Funções exigem admin **daquela** loja → `not_allowed` |
-| 8 | Exclusão por ferramenta externa | Mesmo efeito do 3; não depende do fluxo do app |
+**Preencher `revoked_at` não revoga nada enquanto as políticas continuarem baseadas em `user_roles`.** Até a etapa 5 estar aplicada e validada:
+- as funções de gestão existem só para testes; **nenhuma tela, botão ou função do servidor de revogação fica disponível a funcionários ou administradores**;
+- desligar alguém de verdade continua sendo feito por migração revisada em `user_roles` (e espelhado em `store_members`), ou bloqueando a conta.
 
-Bloquear a conta (banimento) também corta acesso e impede renovar o token.
-
-## 5. Sequência em etapas pequenas (cada uma com aprovação própria)
+## 5. Sequência (cada etapa com aprovação própria)
 
 1. Backup novo confirmado por André.
-2. Colunas de revogação (aditivas). Nada muda no acesso.
-3. Função `can_access_store` + testes. Nada a usa ainda.
-4. Funções de gestão de vínculos + função do servidor no painel (sem tela nova até aprovação).
-5. Trocar as políticas por loja, **tabela por tabela**, mantendo André e Ariane como admin da piloto; `user_roles` passa a valer só para manter a tela de menus até ser substituída pela leitura de `store_members`.
-6. Limpeza periódica de órfãos (rota agendada protegida pelo segredo já existente), só marca e registra.
-7. Relatório; segunda loja continua proibida até validação completa.
+2. Colunas de revogação + tabela de eventos + evento de origem dos 2 vínculos. Nada muda no acesso.
+3. `can_access_store` + verificação de dono da função e permissões efetivas.
+4. Funções de gestão e de limpeza (sem tela, sem função de servidor exposta).
+5. Trocar políticas por loja, uma tabela por vez, com André e Ariane conferidos a cada troca; só então liberar a gestão no painel.
+6. Rotina agendada de limpeza (segredo próprio do agendamento).
+7. Relatório. Segunda loja continua proibida até validação completa.
 
 ## 6. Testes de segurança (não executados nesta etapa)
 
-Arquivo novo em `scripts/db-tests/`, em transação revertida, simulando usuários com `SET LOCAL ROLE authenticated` e `request.jwt.claims`:
-- vínculo válido lê pedidos da sua loja;
-- após `revoke_store_member`, a mesma "sessão" recebe 0 linhas na consulta seguinte;
-- conta inexistente ou bloqueada com token válido: 0 linhas;
-- usuário da loja A não lê nem altera nada da loja B;
-- admin da A recebe `not_allowed` ao revogar/conceder na B; último admin não pode ser removido;
-- anônimo: sem permissão em tabelas e funções.
+Arquivo em `scripts/db-tests/`, em transação revertida, simulando sessões com `SET LOCAL ROLE authenticated` e `request.jwt.claims`:
+- vínculo válido acessa a própria loja; após revogação, a **mesma sessão simulada** recebe recusa na consulta seguinte (token antigo);
+- conta com `deleted_at` ou `banned_until` futuro: recusa, mesmo com token válido;
+- loja A não lê nem altera nada da loja B; pessoa com duas lojas perde só a revogada;
+- admin da A recebe `not_allowed` na B; último admin não sai; reativação acrescenta evento e não altera eventos anteriores;
+- [R2] concorrência: duas sessões revogando os dois últimos admins ao mesmo tempo (script no estilo de `submit_concurrency.sh`) → exatamente uma sucede, outra recebe `last_admin`, loja fica com 1 admin válido;
+- [R1] permissões efetivas com `has_function_privilege` e `has_table_privilege`: anon sem nada; authenticated só o previsto; `mark_orphan_members` só service_role; conferir `proconfig` = `search_path=""` em todas.
 
-**Limitações:** exigem contas e uma loja fictícias. Isso só será feito com nova autorização. Também precisa da forma de execução: antes você recusou rodar pela sessão privilegiada de migração. Alternativas: um ambiente de rascunho isolado (recomendado) ou nova autorização explícita. Testes em telas com André usam a sessão dele; os de Ariane dependem da aprovação dela.
+**Limitações:** exigem contas e loja fictícias e uma forma de execução aprovada (você recusou antes a sessão privilegiada de migração). Recomendado: ambiente de rascunho isolado. Nada é criado sem nova autorização.
 
 ## 7. Riscos e recuperação
 
-- Ler `auth.users` dentro da função depende do esquema da plataforma (`deleted_at`, `banned_until`). Mitigação: teste dedicado; se mudar, a função falha fechada (recusa).
-- Troca de políticas pode bloquear André/Ariane. Mitigação: uma tabela por vez, conferência imediata, e volta às políticas atuais guardadas no relatório.
-- Desempenho: índice parcial de vínculos ativos.
-- Tokens: até 1 h de validade, mas sem efeito porque tudo é decidido no banco.
-- Recuperação: etapas 2–4 são aditivas e nada as usa até a etapa 5; desligar = revogar a execução das funções.
+- Dependência das colunas `deleted_at`/`banned_until` da plataforma: se mudarem, a função passa a falhar e recusa (falha fechada); teste dedicado.
+- Dono da função diferente de `postgres` poderia impedir a leitura de `auth.users`: verificação obrigatória na etapa 3; se falhar, parar e reavaliar sem conceder permissões novas.
+- Troca de políticas pode bloquear André/Ariane: uma tabela por vez, políticas antigas registradas para retorno imediato.
+- Prazo do token não confirmado: irrelevante para a proteção, mas registrado.
+- Etapas 2–4 são aditivas e nada as usa até a 5; desligar = revogar a execução das funções.
 
 ## 8. Critérios de aceitação
 
-- Os 8 cenários com resultado esperado em testes automatizados no banco.
-- André e Ariane com acesso igual ao atual na loja piloto, verificado antes e depois.
-- Contagens, regras, configurações, envio transacional e proteções das Fases 0A/0B inalterados.
-- Nenhuma nova referência a `auth.users`; nenhuma chave de serviço no navegador; anônimo sem permissão.
-- 69+ testes e compilação OK; nada publicado; nenhuma segunda loja real ativa.
+- 8 cenários do pedido + teste de concorrência do último admin + reativação com histórico preservado, todos automatizados.
+- Todas as funções com `search_path` vazio, objetos qualificados e permissões efetivas conferidas.
+- Nenhuma referência nova a `auth.users`, nenhuma permissão nova em `auth.users`, `ORIGIN_HASH_SECRET` sem novo uso.
+- Gestão de revogação indisponível no painel até a etapa 5 validada.
+- André e Ariane com acesso igual ao atual; contagens, regras, configurações, envio e Fases 0A/0B/1/2 inalterados.
+- 69+ testes, compilação OK, nada publicado.
