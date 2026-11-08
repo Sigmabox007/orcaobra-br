@@ -27,3 +27,7 @@
 - [x] Aplicar exclusivamente a migração da Fase 1 após autorização do SQL.
 - [x] Conferir contagens, integridade, administradores, gravações e regressão; emitir relatório sem publicação.
 - [ ] Testes reais de vendedor da Fase 0B — dependem de conta de vendedor e autorização do procedimento; não executados nesta fase.
+## Fase 2 — vínculo de usuários à loja
+- [ ] Exportação atualizada pós-Fase 1 confirmada pelo proprietário — aguardando.
+- [ ] Migração store_members (tabela, segurança, 2 vínculos admin) após confirmação.
+- [ ] Contagens, conferências, testes, painel como André, relatório-fase-2.md; sem publicação.
