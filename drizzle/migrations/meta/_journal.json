@@ -36,6 +36,13 @@
       "when": 1794015609291,
       "tag": "0004_phase1_pilot_store_attribution",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794117712040,
+      "tag": "0005_phase2_store_members",
+      "breakpoints": true
     }
   ]
 }

@@ -31,5 +31,7 @@
 - [x] Exportação pós-Fase 1 confirmada (orcaobra-br_261108.backup, 443 KB; restauração não testada).
 - [x] Pré-requisitos conferidos e SQL apresentado (docs/fase-2-sql-proposto.md).
 - [x] Autorização do SQL corrigido recebida em 08/11/2026.
-- [ ] Migração store_members — interrompida antes da aplicação: FK direta a auth.users não permitida para esta tabela; aguarda decisão e nova autorização do proprietário, sem correção automática.
-- [ ] Conferências pós-migração e painel como André — dependem da migração; 69 testes existentes aprovados e diagnóstico registrado em relatorio-fase-2.md, sem publicação.
+- [x] Migração store_members (SQL revisado, sem FK a auth.users) aplicada após autorização; verificações em relatorio-fase-2.md.
+- [ ] Painel aberto como André/Ariane após a Fase 2 — não verificado.
+## Fase 3 — bloqueante
+- [ ] Mecanismo seguro de revogação/limpeza de vínculos de contas excluídas, definido e testado antes de qualquer política usar store_members.

@@ -1,42 +1,38 @@
 # OrçaObra — Relatório da Fase 2
 
-Data: 08/11/2026, UTC.
+Data: 08/11/2026, UTC. **Migração aplicada após autorização explícita do SQL revisado. Nada publicado; Fase 3 não iniciada.**
 
-**Execução interrompida na conferência preliminar. A migração NÃO foi executada. Nenhuma tentativa de correção foi feita. Nada publicado; Fase 3 não iniciada.**
+## Histórico
+1. Primeira tentativa (SQL com `REFERENCES auth.users(id) ON DELETE CASCADE`) interrompida antes da aplicação: a regra da plataforma só permite essa referência em `profiles` e `user_roles`.
+2. SQL revisado pelo proprietário: `user_id uuid NOT NULL`, sem chave estrangeira. Demais definições preservadas. Único acréscimo: `COMMENT ON COLUMN` documentando a ausência da chave.
+3. Aplicado em transação única: `drizzle/migrations/0005_phase2_store_members.sql`.
 
-## Autorização e backup
+## Backup
+`database_export_08_11_26/orcaobra-br_261108.backup` (443 KB, 08/11/2026). **Integridade e restauração não testadas.**
 
-O proprietário autorizou exclusivamente o SQL corrigido de `docs/fase-2-sql-proposto.md`, em uma única transação, com interrupção e diagnóstico em caso de erro, antes de qualquer correção.
+## Pré-requisitos (conferidos imediatamente antes)
+André e Ariane existem como contas e admins (2); `store_members` inexistente; loja piloto existe. Sem divergência.
 
-Backup pós-Fase 1 confirmado pelo proprietário: bucket `database_export_08_11_26`, arquivo `orcaobra-br_261108.backup`, 443 KB, de 08/11/2026, baixado e guardado em local seguro, preservando a exportação anterior. **Integridade e restauração não testadas; arquivo não verificado independentemente nesta execução.**
+## Contagens antes → depois
+contas 2→2, lojas 1→1, pedidos 14→14, itens 20→20, complementos 11→11, histórico 12→12, retornos 1→1, regras 22→22, uso IA 22→22, envios 11→11, configurações 1→1, papéis 2→2. Catálogo: políticas 18→19, gatilhos 3→3, funções 6→6.
 
-## Diagnóstico impeditivo
+## Verificações pós-migração
+- `store_members`: 2 linhas, ambas da loja piloto, RLS ativo.
+- Vínculos com conta existente: 2; **vínculos órfãos: 0**.
+- Diferença `user_roles`(admin) × `store_members`: vazia nos dois sentidos.
+- `user_roles` preservado linha a linha (md5 idêntico antes/depois: `387993801460b3e971c2eb935805ba84`).
+- Permissões efetivas: anon sem SELECT/INSERT/UPDATE/DELETE/TRUNCATE; authenticated só SELECT.
+- Chaves estrangeiras para `auth.users`: 0.
+- Testes automáticos: 69 aprovados (5 arquivos). Compilação: build OK.
 
-O SQL autorizado contém:
+## Não verificado
+Painel aberto como André/Ariane (sem mudança esperada: nada usa a tabela nova). Testes reais de vendedor (Fase 0B) continuam pendentes.
 
-```sql
-user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
-```
+## Consequência da ausência da chave estrangeira
+Apagar uma conta **não remove automaticamente** seus vínculos em `store_members`; podem surgir vínculos órfãos. Hoje isso não dá acesso a ninguém, pois nenhuma política ou função usa a tabela.
 
-A regra vigente do Lovable Cloud permite essa referência direta a `auth.users` somente em `public.profiles` e `public.user_roles`. Novas tabelas de aplicação devem armazenar IDs de usuários como UUID simples ou referenciar `public.profiles` quando houver necessidade de campos de perfil. A tabela proposta `public.store_members` não está entre as exceções.
+## Requisito bloqueante da Fase 3
+Antes de qualquer política usar `store_members`, definir e validar (com testes) um mecanismo seguro de revogação e limpeza dos vínculos de contas excluídas. Sem isso, a Fase 3 não começa.
 
-A justificativa da seção 2 do plano anterior, de que a exceção se estenderia a qualquer tabela de papéis, foi incorreta. A conferência das instruções da plataforma confirmou o conflito antes de qualquer aplicação.
-
-**Não apliquei o SQL autorizado nem o substituí silenciosamente por outro.** Uma eventual revisão para `user_id uuid NOT NULL` removeria a referência direta e também a exclusão automática do vínculo ao apagar a conta; essa diferença exige nova conferência e autorização do proprietário. Essa revisão não foi realizada nesta etapa.
-
-## Verificações realizadas
-
-- Documento SQL e plano arquivado lidos; `REVOKE ALL` antes dos `GRANT`s está presente, assim como a consulta de permissões efetivas solicitada.
-- Consulta somente de leitura: `to_regclass('public.store_members')` retornou NULL; a tabela ainda não existe.
-- Consulta somente de leitura: 2 registros em `public.user_roles` e 1 loja. Nenhum usuário, vínculo, papel ou loja foi criado ou alterado.
-- Testes automáticos existentes: **69 aprovados, 5 arquivos**, executados com `bunx vitest run`.
-
-## Verificações não realizadas
-
-Como a execução foi interrompida antes da migração, não há resultado pós-migração de contagens completas, digests, preservação linha a linha dos administradores, permissões efetivas de `store_members`, comparação do catálogo ou painel autenticado. Nenhum desses critérios é declarado aprovado.
-
-Não houve alteração do código nem atualização dos tipos gerados. A compilação não foi executada manualmente, conforme as regras do ambiente; não havia registro de compilação automática disponível nos diagnósticos consultados. Portanto **a compilação desta etapa não é declarada verificada**.
-
-## Próximo passo
-
-Aguardar a decisão do proprietário sobre a revisão mínima do SQL diante da restrição da plataforma. Sem nova autorização, não executar migração nem correção. Nenhuma restauração ou reversão é necessária, pois o banco não foi alterado.
+## Recuperação
+`DROP TABLE public.store_members;` desfaz a fase sem afetar outros dados (exige autorização).
