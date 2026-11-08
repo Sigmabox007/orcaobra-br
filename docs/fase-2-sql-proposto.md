@@ -21,6 +21,7 @@ CREATE TABLE public.store_members (
 );
 CREATE INDEX store_members_store_id_idx ON public.store_members (store_id);
 
+REVOKE ALL ON TABLE public.store_members FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.store_members TO authenticated;
 GRANT ALL ON public.store_members TO service_role;
 ALTER TABLE public.store_members ENABLE ROW LEVEL SECURITY;
@@ -48,3 +49,19 @@ WHERE ur.user_id IN ('702b7233-45df-46fa-9656-f1ecec68d212','22157d7d-70ee-4e47-
 - Contagens acima iguais; `store_members` = 2 linhas; `user_roles` igual linha a linha.
 - Catálogo: 19 políticas (18 + 1 nova), 3 gatilhos, 6 funções.
 - Diferença `user_roles` × `store_members` vazia; 69+ testes e compilação OK; nada publicado.
+
+### Verificação de permissões efetivas (após aplicação)
+```sql
+-- Esperado: anon = false em tudo; authenticated = true só em SELECT.
+SELECT r.role, p.priv
+FROM (VALUES ('anon'), ('authenticated')) AS r(role)
+CROSS JOIN (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE')) AS p(priv)
+ORDER BY r.role, p.priv;
+-- conferida com:
+SELECT r.role, p.priv,
+       has_table_privilege(r.role, 'public.store_members', p.priv) AS permitido
+FROM (VALUES ('anon'), ('authenticated')) AS r(role)
+CROSS JOIN (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE')) AS p(priv)
+ORDER BY r.role, p.priv;
+```
+Resultado esperado: `anon` sem nenhuma permissão (5× false); `authenticated` com `SELECT` = true e `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE` = false.
