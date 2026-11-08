@@ -53,11 +53,6 @@ WHERE ur.user_id IN ('702b7233-45df-46fa-9656-f1ecec68d212','22157d7d-70ee-4e47-
 ### Verificação de permissões efetivas (após aplicação)
 ```sql
 -- Esperado: anon = false em tudo; authenticated = true só em SELECT.
-SELECT r.role, p.priv
-FROM (VALUES ('anon'), ('authenticated')) AS r(role)
-CROSS JOIN (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE')) AS p(priv)
-ORDER BY r.role, p.priv;
--- conferida com:
 SELECT r.role, p.priv,
        has_table_privilege(r.role, 'public.store_members', p.priv) AS permitido
 FROM (VALUES ('anon'), ('authenticated')) AS r(role)
