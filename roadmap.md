@@ -28,6 +28,8 @@
 - [x] Conferir contagens, integridade, administradores, gravações e regressão; emitir relatório sem publicação.
 - [ ] Testes reais de vendedor da Fase 0B — dependem de conta de vendedor e autorização do procedimento; não executados nesta fase.
 ## Fase 2 — vínculo de usuários à loja
-- [ ] Exportação atualizada pós-Fase 1 confirmada pelo proprietário — aguardando.
+- [x] Exportação pós-Fase 1 confirmada (orcaobra-br_261108.backup, 443 KB; restauração não testada).
+- [x] Pré-requisitos conferidos e SQL apresentado (docs/fase-2-sql-proposto.md).
+- [ ] Autorização do SQL — aguardando.
 - [ ] Migração store_members (tabela, segurança, 2 vínculos admin) após confirmação.
 - [ ] Contagens, conferências, testes, painel como André, relatório-fase-2.md; sem publicação.
