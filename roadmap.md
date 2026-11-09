@@ -33,5 +33,9 @@
 - [x] Autorização do SQL corrigido recebida em 08/11/2026.
 - [x] Migração store_members (SQL revisado, sem FK a auth.users) aplicada após autorização; verificações em relatorio-fase-2.md.
 - [ ] Painel aberto como André/Ariane após a Fase 2 — não verificado.
+## Pré-Fase 3
+- [x] Plano revisão 1 (R1–R7) apresentado.
+- [x] Etapa 2 aplicada após autorização restrita (relatorio-pre-fase-3-etapa-2.md).
+- [ ] Etapas 3–7 — aguardando nova autorização de André.
 ## Fase 3 — bloqueante
 - [ ] Mecanismo seguro de revogação/limpeza de vínculos de contas excluídas, definido e testado antes de qualquer política usar store_members.
