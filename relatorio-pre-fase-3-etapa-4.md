@@ -1,6 +1,26 @@
-# Relatório — Pré-Fase 3, Etapa 4: operação interrompida
+# Relatório — Pré-Fase 3, Etapa 4: SQL revisado preparado, aguardando aprovação
 
-Data: 10/11/2026. Somente leitura do banco. Nenhuma migração preparada no histórico ou aplicada; nenhum dado, função, política, permissão ou tela alterado. Nada publicado.
+Data: 10/11/2026. Somente leitura do banco. SQL revisado preparado para conferência, sem registro no histórico de migrações ou aplicação; nenhum dado, função, política, permissão ou tela alterado. Nada publicado.
+
+## Atualização — SQL revisado recebido às 06:27 UTC
+
+O novo anexo `pre_fase3_etapa4_sql_para_lovable_1.txt` substitui integralmente a referência anterior. Lido integralmente, com SHA-256 confirmado:
+
+```text
+0a0725df4bf46d317c8fec6f4eb5dabd9b1cd2441926e2579967ef1fc08d8dd4
+```
+
+Comparação dos dois arquivos: somente as duas verificações de search_path (pré/pós) e o bloco de verificação de FKs foram modificados. Os três corpos de funções e suas permissões permanecem byte a byte inalterados.
+
+Todos os 13 grupos de conferência por SELECT retornaram true: dependências, ausência das funções da Etapa 4, vínculos/eventos, administradores válidos, contagens do catálogo, dono/segurança/search_path, permissões existentes, RLS, colunas obrigatórias, enum, FKs da aplicação, ausência de políticas usando can_access_store e ausência de órfãos. As permissões diretas foram reconferidas nas cinco operações. As condições de tabelas do pós-check, avaliáveis antes da aplicação, também passaram; os dois vínculos continuam sem marcações de revogação.
+
+Histórico novamente inspecionado: consistente, sem achados, entradas 0000–0007. Nenhuma migração pendente fora do escopo identificada. Contagens comerciais e os dois papéis admin permanecem iguais aos registrados abaixo.
+
+SQL efetivo preparado, integral e sem modificações, em `docs/0008_prephase3_step4_member_management_functions.sql`, com cópia para conferência em Files. **Não foi criado arquivo em drizzle/migrations nem alterado o journal**: a ferramenta disponível aplica imediatamente, portanto não foi chamada antes da aprovação explícita exigida por André.
+
+Próximo passo bloqueado: conferência e aprovação de André sobre o SQL apresentado. Antes de eventual aplicação, reconferir pré-requisitos imediatamente e usar o conteúdo integral, em transação gerenciada única. Testes automatizados, compilação e pós-condições das funções novas permanecem não executados nesta preparação; auditoria independente, testes funcionais isolados e rollback deliberadamente falho não são declarados validados. Etapas 5–7 e publicação continuam não autorizadas.
+
+As seções abaixo preservam o diagnóstico histórico do anexo anterior; seus dois bloqueios foram resolvidos pelo novo SQL, não por mudanças no banco.
 
 ## 1. Referência autorizada
 

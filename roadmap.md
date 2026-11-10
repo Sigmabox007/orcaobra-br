@@ -37,7 +37,8 @@
 - [x] Plano revisão 1 (R1–R7) apresentado.
 - [x] Etapa 2 aplicada após autorização restrita (relatorio-pre-fase-3-etapa-2.md).
 - [x] Etapa 3 aplicada após autorização restrita (relatorio-pre-fase-3-etapa-3.md); teste funcional com sessões reais pendente.
-- [ ] Etapa 4 — interrompida antes da aplicação: comparação literal de search_path incompatível e contagem global de FKs a auth.users divergente no SQL anexado; aguarda SQL revisado e aprovação explícita (relatorio-pre-fase-3-etapa-4.md).
+- [x] Etapa 4 — SQL revisado recebido, SHA-256 confirmado, corpos das três funções preservados e pré-requisitos reconferidos somente por leitura, sem divergências.
+- [ ] Etapa 4 — SQL integral preparado em docs/0008_prephase3_step4_member_management_functions.sql; aplicação bloqueada até conferência e aprovação explícita de André, com nova leitura imediata dos pré-requisitos.
 - [ ] Etapas 5–7 — não autorizadas.
 ## Fase 3 — bloqueante
 - [ ] Mecanismo seguro de revogação/limpeza de vínculos de contas excluídas, definido e testado antes de qualquer política usar store_members.
