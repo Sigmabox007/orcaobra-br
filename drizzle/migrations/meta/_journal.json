@@ -50,6 +50,13 @@
       "when": 1794259684259,
       "tag": "0006_prephase3_step2_member_revocation_history",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794287970970,
+      "tag": "0007_prephase3_step3_can_access_store",
+      "breakpoints": true
     }
   ]
 }
