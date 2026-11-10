@@ -541,6 +541,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      grant_store_member: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _store: string
+          _user: string
+        }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -549,6 +557,8 @@ export type Database = {
         Returns: boolean
       }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
+      mark_orphan_members: { Args: never; Returns: number }
+      revoke_store_member: { Args: { _member: string }; Returns: undefined }
       submit_quote_request: { Args: { payload: Json }; Returns: Json }
     }
     Enums: {
