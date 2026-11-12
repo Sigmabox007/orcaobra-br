@@ -4,9 +4,9 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: { auth: { getUser: 
 vi.mock("@/integrations/supabase/auth-middleware", () => ({ requireSupabaseAuth: {} }));
 vi.mock("@tanstack/react-start", () => {
   const chain: Record<string, unknown> = {};
-  chain.middleware = () => chain;
-  chain.inputValidator = () => chain;
-  chain.handler = () => chain;
+  chain["middleware"] = () => chain;
+  chain["inputValidator"] = () => chain;
+  chain["handler"] = () => chain;
   return { createServerFn: () => chain };
 });
 
@@ -55,7 +55,7 @@ describe("deleteQuoteRequest store scope", () => {
     const m = mockDb({ roles: admin, row: { protocol: "OB-1" } });
     expect(await runDeleteQuoteRequest(m.db, { id: ID, protocol: "OB-1" })).toEqual({ ok: true });
     expect(m.rpc).toHaveBeenCalledWith("can_access_store", { _store: PILOT, _min_role: "admin" });
-    expect(m.calls[0].filters).toEqual([["id", ID], ["store_id", PILOT]]);
+    expect(m.calls[0]?.filters).toEqual([["id", ID], ["store_id", PILOT]]);
     expect(m.calls[1]).toEqual({ op: "delete", filters: [["id", ID], ["store_id", PILOT], ["protocol", "OB-1"]] });
   });
 
