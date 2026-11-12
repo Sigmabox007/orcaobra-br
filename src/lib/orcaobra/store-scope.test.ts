@@ -10,8 +10,8 @@ function mockDb(rows: unknown[]) {
   const calls: [string, ...unknown[]][] = [];
   const q: Record<string, unknown> = {};
   for (const m of ["select", "eq", "in"]) q[m] = (...a: unknown[]) => (calls.push([m, ...a]), q);
-  q.then = (r: (v: unknown) => unknown) => r({ data: rows });
-  q.insert = (v: unknown) => (calls.push(["insert", v]), Promise.resolve({ error: null }));
+  q["then"] = (r: (v: unknown) => unknown) => r({ data: rows });
+  q["insert"] = (v: unknown) => (calls.push(["insert", v]), Promise.resolve({ error: null }));
   return { db: { from: (t: string) => (calls.push(["from", t]), q) } as never, calls };
 }
 
