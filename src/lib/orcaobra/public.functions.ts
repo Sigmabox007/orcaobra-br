@@ -42,14 +42,7 @@ export const suggestComplements = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     if (data.category === "outro") return { ok: true as const, suggestions: [] };
     const ai = await import("./ai.server");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: rows } = await supabaseAdmin
-      .from("association_rules")
-      .select("id, trigger, complement, condition, explanation, reviewed, active")
-      .eq("category", data.category)
-      .eq("reviewed", true)
-      .eq("active", true);
-    const rules = eligibleRules(rows ?? []);
+    const rules = eligibleRules(await ai.fetchPilotRules(data.category));
     if (rules.length === 0) return { ok: true as const, suggestions: [] };
     const origin = await ai.originHash().catch(() => null);
     if (!origin) {
@@ -99,15 +92,12 @@ export const submitRequest = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => submitSchema.parse(d))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { originHash } = await import("./ai.server");
+    const { originHash, fetchAllowedRuleIds } = await import("./ai.server");
     // Single transactional database call: order, items, complements, history and submit log
     // are written together or not at all. Rate limit and retry recovery are decided there.
     return runSubmit(data, {
       origin: originHash,
-      allowedRuleIds: async (ids) => {
-        const { data: rows } = await supabaseAdmin.from("association_rules").select("id").in("id", ids).eq("reviewed", true).eq("active", true);
-        return new Set((rows ?? []).map((r) => r.id));
-      },
+      allowedRuleIds: (ids) => fetchAllowedRuleIds(ids),
       rpc: async (payload) => {
         const { data: res, error } = await supabaseAdmin.rpc("submit_quote_request", { payload: payload as unknown as Json });
         return { data: res, error: error ? { code: error.code } : null };

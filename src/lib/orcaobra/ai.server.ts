@@ -53,8 +53,43 @@ export async function guardAi(origin: string, sessionId: string) {
   return checkAiLimit(s as Limits, { globalToday, originHour, originDay, session });
 }
 
-export async function logUsage(kind: "interpret" | "suggest", origin: string, sessionId: string, success: boolean) {
-  await supabaseAdmin.from("ai_usage").insert({ kind, origin_hash: origin, session_id: sessionId, success });
+/** Pilot store (A.S. Figueiredo). Server-side only; never taken from the browser. */
+export const PILOT_STORE_ID = "cd677879-a4a7-4487-bf89-411797fec356";
+
+type Db = Pick<typeof supabaseAdmin, "from">;
+
+/** Reviewed + active rules of one category, restricted to the pilot store. */
+export async function fetchPilotRules(category: string, db: Db = supabaseAdmin) {
+  const { data } = await db
+    .from("association_rules")
+    .select("id, trigger, complement, condition, explanation, reviewed, active")
+    .eq("store_id", PILOT_STORE_ID)
+    .eq("category", category)
+    .eq("reviewed", true)
+    .eq("active", true);
+  return data ?? [];
+}
+
+/** Subset of ids that are reviewed + active rules of the pilot store. */
+export async function fetchAllowedRuleIds(ids: string[], db: Db = supabaseAdmin) {
+  const { data } = await db
+    .from("association_rules")
+    .select("id")
+    .eq("store_id", PILOT_STORE_ID)
+    .in("id", ids)
+    .eq("reviewed", true)
+    .eq("active", true);
+  return new Set((data ?? []).map((r) => r.id));
+}
+
+export async function logUsage(
+  kind: "interpret" | "suggest",
+  origin: string,
+  sessionId: string,
+  success: boolean,
+  db: Db = supabaseAdmin,
+) {
+  await db.from("ai_usage").insert({ kind, origin_hash: origin, session_id: sessionId, success, store_id: PILOT_STORE_ID });
 }
 
 async function callJson(userContent: string, schemaName: string, schema: Record<string, unknown>): Promise<unknown> {
