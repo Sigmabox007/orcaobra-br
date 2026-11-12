@@ -4,14 +4,32 @@ import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/orcaobra/brand";
 import { Button } from "@/components/ui/button";
 
+// Local constant: browser route must not import *.server.ts modules.
+export const PILOT_STORE_ID = "cd677879-a4a7-4487-bf89-411797fec356";
+
+type AccessRpc = (
+  fn: "can_access_store",
+  args: { _store: string; _min_role: "seller" | "admin" },
+) => PromiseLike<{ data: boolean | null; error: unknown }>;
+
+/** Fail-closed panel access from store_members via can_access_store; no user_roles fallback. */
+export async function resolvePanelAccess(rpc: AccessRpc) {
+  const [accessRes, adminRes] = await Promise.all([
+    rpc("can_access_store", { _store: PILOT_STORE_ID, _min_role: "seller" }),
+    rpc("can_access_store", { _store: PILOT_STORE_ID, _min_role: "admin" }),
+  ]);
+  const isStaff = !accessRes.error && accessRes.data === true;
+  const isAdmin = isStaff && !adminRes.error && adminRes.data === true;
+  return { isStaff, isAdmin, storeId: PILOT_STORE_ID };
+}
+
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
     const { data } = await supabase.auth.getUser();
     if (!data.user) throw redirect({ to: "/auth" });
-    const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", data.user.id);
-    const list = (roles ?? []).map((r) => r.role);
-    return { user: data.user, isAdmin: list.includes("admin"), isStaff: list.length > 0 };
+    const access = await resolvePanelAccess((fn, args) => supabase.rpc(fn, args));
+    return { user: data.user, isAdmin: access.isAdmin, isStaff: access.isStaff, storeId: access.storeId };
   },
   component: AdminLayout,
 });
