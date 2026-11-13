@@ -14,9 +14,8 @@ const m = vi.hoisted(() => ({
 }));
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => ({ options, useRouteContext: () => m.context, useParams: () => ({ id: "order-1" }) }),
-  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+  Link: ({ children }: { children: React.ReactNode }) => React.createElement("a", null, children),
 }));
-vi.mock("./route", () => ({}));
 vi.mock("@/routes/_authenticated/route", () => ({ PILOT_STORE_ID: "cd677879-a4a7-4487-bf89-411797fec356" }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (options: (typeof m.queries)[number]) => {
