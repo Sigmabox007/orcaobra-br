@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { PILOT_STORE_ID } from "./route";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,21 +23,35 @@ const FIELDS = [
 ] as const;
 
 function Config() {
-  const { isAdmin } = Route.useRouteContext();
+  const { isAdmin, isStaff, storeId } = Route.useRouteContext();
+  const validStore = isStaff && isAdmin && storeId === PILOT_STORE_ID;
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["settings"],
-    queryFn: async () => (await supabase.from("app_settings").select("*").eq("id", 1).single()).data,
+    enabled: validStore,
+    queryFn: async () => {
+      if (!validStore) throw new Error("Invalid store context");
+      const { data, error } = await supabase.from("app_settings").select("*").eq("id", 1).single();
+      if (error) throw error;
+      return data;
+    },
   });
   const { data: testCount } = useQuery({
-    queryKey: ["test-count"],
-    queryFn: async () => (await supabase.from("quote_requests").select("id", { count: "exact", head: true }).eq("is_test", true)).count ?? 0,
+    queryKey: ["test-count", storeId],
+    enabled: validStore,
+    queryFn: async () => {
+      if (!validStore) throw new Error("Invalid store context");
+      const { count, error } = await supabase.from("quote_requests").select("id", { count: "exact", head: true }).eq("store_id", storeId).eq("is_test", true);
+      if (error) throw error;
+      return count ?? 0;
+    },
   });
   const [form, setForm] = useState<Record<string, number | boolean>>({});
   useEffect(() => { if (data) { const { updated_at: _u, ...rest } = data; setForm(rest); } }, [data]);
-  if (!isAdmin) return <p>Apenas administradores.</p>;
+  if (!validStore) return <p>Apenas administradores.</p>;
 
   async function save() {
+    if (!validStore) return;
     const patch: Record<string, number | boolean> = { ai_enabled: !!form["ai_enabled"] };
     for (const [k] of FIELDS) {
       const v = Number(form[k]);
@@ -49,11 +64,14 @@ function Config() {
     qc.invalidateQueries({ queryKey: ["settings"] });
   }
   async function deleteTests() {
+    if (!validStore) return;
     if (!confirm("Excluir todos os pedidos de teste? Essa ação não pode ser desfeita.")) return;
-    const { error } = await supabase.from("quote_requests").delete().eq("is_test", true);
+    const { error } = await supabase.from("quote_requests").delete().eq("store_id", storeId).eq("is_test", true);
     if (error) return void toast.error("Não foi possível excluir.");
     toast.success("Pedidos de teste excluídos.");
-    qc.invalidateQueries();
+    for (const key of ["test-count", "requests", "request", "indicators"]) {
+      qc.invalidateQueries({ queryKey: [key, storeId] });
+    }
   }
 
   return (

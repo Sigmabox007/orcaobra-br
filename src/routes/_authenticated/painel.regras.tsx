@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { PILOT_STORE_ID } from "./route";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -17,35 +18,40 @@ type Cat = "pisos" | "sanitarios" | "pintura";
 const empty = { category: "pisos" as Cat, trigger: "", complement: "", condition: "", clarifying_question: "", explanation: "" };
 
 function Regras() {
-  const { user, isAdmin } = Route.useRouteContext();
+  const { user, isAdmin, isStaff, storeId } = Route.useRouteContext();
+  const validStore = isStaff && isAdmin && storeId === PILOT_STORE_ID;
   const qc = useQueryClient();
   const [form, setForm] = useState(empty);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const { data } = useQuery({
-    queryKey: ["rules"],
+    queryKey: ["rules", storeId],
+    enabled: validStore,
     queryFn: async () => {
-      const { data, error } = await supabase.from("association_rules").select("*").order("category").order("created_at");
+      if (!validStore) throw new Error("Invalid store context");
+      const { data, error } = await supabase.from("association_rules").select("*").eq("store_id", storeId).order("category").order("created_at");
       if (error) throw error;
       return data;
     },
   });
-  if (!isAdmin) return <p>Apenas administradores.</p>;
-  const refresh = () => qc.invalidateQueries({ queryKey: ["rules"] });
+  if (!validStore) return <p>Apenas administradores.</p>;
+  const refresh = () => qc.invalidateQueries({ queryKey: ["rules", storeId] });
 
   async function update(id: string, patch: { active?: boolean; reviewed?: boolean; reviewed_by?: string | null; reviewed_at?: string | null }) {
-    const { error } = await supabase.from("association_rules").update(patch).eq("id", id);
+    if (!validStore) return;
+    const { error } = await supabase.from("association_rules").update(patch).eq("id", id).eq("store_id", storeId);
     if (error) toast.error(error.message.includes("revisada") ? "Revise a regra antes de ativar." : "Não foi possível salvar.");
     refresh();
   }
   async function create() {
+    if (!validStore) return;
     if (!form.trigger || !form.complement || !form.explanation) return void toast.error("Preencha gatilho, complemento e explicação.");
     if (saving) return;
     setSaving(true);
     const values = { ...form, condition: form.condition || null, clarifying_question: form.clarifying_question || null };
     const { error } = editingId
-      ? await supabase.from("association_rules").update(values).eq("id", editingId)
-      : await supabase.from("association_rules").insert(values);
+      ? await supabase.from("association_rules").update(values).eq("id", editingId).eq("store_id", storeId)
+      : await supabase.from("association_rules").insert({ ...values, store_id: storeId });
     setSaving(false);
     if (error) return void toast.error("Não foi possível salvar.");
     toast.success(editingId ? "Alterações salvas. Conteúdo alterado exige nova revisão." : "Regra criada como rascunho.");
@@ -87,7 +93,7 @@ function Regras() {
                   <label className="flex items-center gap-1.5">
                     <Switch checked={r.active} disabled={!r.reviewed} onCheckedChange={(v) => update(r.id, { active: v })} aria-label="Ativa" /> Ativa
                   </label>
-                  <Button size="sm" variant="ghost" onClick={() => confirm("Excluir esta regra?") && supabase.from("association_rules").delete().eq("id", r.id).then(refresh)}>Excluir</Button>
+                  <Button size="sm" variant="ghost" onClick={() => validStore && confirm("Excluir esta regra?") && supabase.from("association_rules").delete().eq("id", r.id).eq("store_id", storeId).then(refresh)}>Excluir</Button>
                 </div>
               </li>
             ))}
