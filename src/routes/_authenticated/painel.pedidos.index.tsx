@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { PILOT_STORE_ID } from "./route";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge, TestBadge } from "@/components/orcaobra/status-badge";
@@ -13,16 +14,21 @@ export const Route = createFileRoute("/_authenticated/painel/pedidos/")({
 });
 
 function Pedidos() {
+  const { storeId, isStaff } = Route.useRouteContext();
+  const validStore = isStaff && storeId === PILOT_STORE_ID;
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"" | Status | "retorno">("");
   const [order, setOrder] = useState<"desc" | "asc">("desc");
   const [showTests, setShowTests] = useState(false);
   const { data, isLoading } = useQuery({
-    queryKey: ["requests", order],
+    queryKey: ["requests", storeId, order],
+    enabled: validStore,
     queryFn: async () => {
+      if (!validStore) throw new Error("Invalid store context");
       const { data, error } = await supabase
         .from("quote_requests")
         .select("id, protocol, customer_name, original_text, category, status, created_at, needs_followup_at, is_test")
+        .eq("store_id", storeId)
         .order("created_at", { ascending: order === "asc" })
         .limit(500);
       if (error) throw error;

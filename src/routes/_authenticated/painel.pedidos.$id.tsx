@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { PILOT_STORE_ID } from "./route";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -21,19 +22,24 @@ const fmt = (d: string) => new Date(d).toLocaleString("pt-BR", { dateStyle: "sho
 
 function Detalhe() {
   const { id } = Route.useParams();
-  const { user, isAdmin } = Route.useRouteContext();
+  const { user, isAdmin, isStaff, storeId } = Route.useRouteContext();
+  const validStore = isStaff && storeId === PILOT_STORE_ID;
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
-    queryKey: ["request", id],
+    queryKey: ["request", storeId, id],
+    enabled: validStore,
     queryFn: async () => {
-      const [r, items, sugg, hist, fu] = await Promise.all([
-        supabase.from("quote_requests").select("*").eq("id", id).single(),
+      if (!validStore) throw new Error("Invalid store context");
+      const r = await supabase.from("quote_requests").select("*").eq("id", id).eq("store_id", storeId).single();
+      if (r.error) throw r.error;
+      if (!r.data || r.data.store_id !== storeId) throw new Error("Order unavailable");
+      const [items, sugg, hist, fu] = await Promise.all([
         supabase.from("request_items").select("*").eq("request_id", id).order("created_at"),
         supabase.from("suggested_complements").select("*").eq("request_id", id),
         supabase.from("status_history").select("*").eq("request_id", id).order("created_at", { ascending: false }),
         supabase.from("followups").select("*").eq("request_id", id).order("created_at", { ascending: false }),
       ]);
-      if (r.error) throw r.error;
+      for (const result of [items, sugg, hist, fu]) if (result.error) throw result.error;
       return { r: r.data, items: items.data ?? [], sugg: sugg.data ?? [], hist: hist.data ?? [], fu: fu.data ?? [] };
     },
   });
@@ -55,22 +61,23 @@ function Detalhe() {
     setMsg(`Olá, ${first}! Aqui é da A.S. Figueiredo Materiais de Construção, sobre o seu pedido de orçamento ${data.r.protocol}.`);
   }, [data]);
 
-  if (isLoading || !data) return <p className="text-sm text-muted-foreground">Carregando…</p>;
+  if (!validStore || isLoading || !data || data.r.store_id !== storeId || data.r.id !== id) return <p className="text-sm text-muted-foreground">Carregando…</p>;
   const { r, items, sugg, hist, fu } = data;
   const interp = r.ai_interpretation as { activity?: string; missing_info?: string[] } | null;
   const clar = (r.clarifications as { question: string; answer: string }[]) ?? [];
   const products = [...requestedProducts(items.filter((i) => i.origin !== "complement"), r.original_text, interp?.activity), ...items.filter((i) => i.origin === "complement")];
   const pending = pendingClarifications(clar);
   const refresh = () => {
-    qc.invalidateQueries({ queryKey: ["request", id] });
-    qc.invalidateQueries({ queryKey: ["requests"] });
-    qc.invalidateQueries({ queryKey: ["indicators"] });
-    qc.invalidateQueries({ queryKey: ["test-count"] });
+    qc.invalidateQueries({ queryKey: ["request", storeId, id] });
+    qc.invalidateQueries({ queryKey: ["requests", storeId] });
+    qc.invalidateQueries({ queryKey: ["indicators", storeId] });
+    qc.invalidateQueries({ queryKey: ["test-count", storeId] });
   };
 
   async function saveStatus() {
+    if (!validStore || r.store_id !== storeId || r.id !== id) return;
     if (newStatus === r.status) return void toast.info("Status não mudou.");
-    const { error } = await supabase.from("quote_requests").update({ status: newStatus, updated_at: new Date().toISOString() }).eq("id", id);
+    const { error } = await supabase.from("quote_requests").update({ status: newStatus, updated_at: new Date().toISOString() }).eq("id", id).eq("store_id", storeId).select("id").single();
     if (error) return void toast.error("Não foi possível salvar.");
     await supabase.from("status_history").insert({ request_id: id, from_status: r.status, to_status: newStatus, changed_by: user.id, note: statusNote || null });
     setStatusNote("");
@@ -78,27 +85,32 @@ function Detalhe() {
     refresh();
   }
   async function setTest(value: boolean) {
-    if (!isAdmin || savingTest) return;
+    if (!validStore || r.store_id !== storeId || r.id !== id || !isAdmin || savingTest) return;
     setSavingTest(true);
-    const { error } = await supabase.from("quote_requests").update({ is_test: value, updated_at: new Date().toISOString() }).eq("id", id);
+    const { error } = await supabase.from("quote_requests").update({ is_test: value, updated_at: new Date().toISOString() }).eq("id", id).eq("store_id", storeId).select("id").single();
     setSavingTest(false);
     if (error) return void toast.error("Não foi possível alterar a classificação.");
     toast.success(value ? "Pedido marcado como teste." : "Classificação de teste removida.");
     refresh();
   }
   async function saveNotes() {
+    if (!validStore || r.store_id !== storeId || r.id !== id) return;
     const { error } = await supabase
       .from("quote_requests")
       .update({ internal_notes: notes || null, needs_followup_at: followDate ? new Date(`${followDate}T09:00:00`).toISOString() : null })
-      .eq("id", id);
+      .eq("id", id).eq("store_id", storeId).select("id").single();
     if (error) return void toast.error("Não foi possível salvar.");
     toast.success("Informações salvas.");
     refresh();
   }
   async function addFollowup() {
+    if (!validStore || r.store_id !== storeId || r.id !== id) return;
+    const parent = await supabase.from("quote_requests").select("id, store_id").eq("id", id).eq("store_id", storeId).single();
+    if (parent.error || !parent.data || parent.data.store_id !== storeId) return void toast.error("Não foi possível registrar.");
     const { error } = await supabase.from("followups").insert({ request_id: id, user_id: user.id, note: followNote || null });
     if (error) return void toast.error("Não foi possível registrar.");
-    await supabase.from("quote_requests").update({ last_followup_at: new Date().toISOString() }).eq("id", id);
+    const { error: updateError } = await supabase.from("quote_requests").update({ last_followup_at: new Date().toISOString() }).eq("id", id).eq("store_id", storeId).select("id").single();
+    if (updateError) return void toast.error("Não foi possível registrar.");
     setFollowNote("");
     toast.success("Acompanhamento registrado.");
     refresh();

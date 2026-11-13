@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { PILOT_STORE_ID } from "./route";
 import { computeIndicators, type Status } from "@/lib/orcaobra/rules";
 
 export const Route = createFileRoute("/_authenticated/painel/")({
@@ -9,26 +10,32 @@ export const Route = createFileRoute("/_authenticated/painel/")({
 });
 
 function Dashboard() {
-  const { isAdmin } = Route.useRouteContext();
+  const { isAdmin, isStaff, storeId } = Route.useRouteContext();
+  const validStore = isStaff && storeId === PILOT_STORE_ID;
   const { data: rows } = useQuery({
-    queryKey: ["indicators"],
+    queryKey: ["indicators", storeId],
+    enabled: validStore,
     queryFn: async () => {
-      const { data, error } = await supabase.from("quote_requests").select("status, is_test, needs_followup_at").limit(5000);
+      if (!validStore) throw new Error("Invalid store context");
+      const { data, error } = await supabase.from("quote_requests").select("status, is_test, needs_followup_at").eq("store_id", storeId).limit(5000);
       if (error) throw error;
       return data as { status: Status; is_test: boolean; needs_followup_at: string | null }[];
     },
   });
   const { data: ai } = useQuery({
-    queryKey: ["ai-usage-today"],
+    queryKey: ["ai-usage-today", storeId],
+    enabled: validStore,
     queryFn: async () => {
+      if (!validStore) throw new Error("Invalid store context");
       const d = new Date();
       d.setUTCHours(0, 0, 0, 0);
       const week = new Date(Date.now() - 7 * 86400_000).toISOString();
       const [today, fails, wk] = await Promise.all([
-        supabase.from("ai_usage").select("id", { count: "exact", head: true }).gte("created_at", d.toISOString()),
-        supabase.from("ai_usage").select("id", { count: "exact", head: true }).gte("created_at", d.toISOString()).eq("success", false),
-        supabase.from("ai_usage").select("id", { count: "exact", head: true }).gte("created_at", week),
+        supabase.from("ai_usage").select("id", { count: "exact", head: true }).eq("store_id", storeId).gte("created_at", d.toISOString()),
+        supabase.from("ai_usage").select("id", { count: "exact", head: true }).eq("store_id", storeId).gte("created_at", d.toISOString()).eq("success", false),
+        supabase.from("ai_usage").select("id", { count: "exact", head: true }).eq("store_id", storeId).gte("created_at", week),
       ]);
+      for (const result of [today, fails, wk]) if (result.error) throw result.error;
       return { today: today.count ?? 0, fails: fails.count ?? 0, week: wk.count ?? 0 };
     },
   });
