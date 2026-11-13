@@ -65,6 +65,7 @@ beforeEach(() => {
   m.context = { storeId: PILOT, isStaff: true, isAdmin: true, user: { id: "user-1" } };
   m.parent = parent(); m.error = null; m.zeroUpdated = false; m.invalidate.mockClear();
   vi.spyOn(window, "confirm").mockReturnValue(true);
+  HTMLElement.prototype.scrollIntoView = vi.fn();
 });
 
 describe("panel store scoping with isolated database mocks", () => {
@@ -129,7 +130,7 @@ describe("panel store scoping with isolated database mocks", () => {
     if (action === "status") {
       fireEvent.change(ui.getByRole("combobox", { name: "Novo status" }), { target: { value: "em_analise" } });
       fireEvent.click(ui.getByRole("button", { name: "Salvar status" }));
-    } else fireEvent.click(ui.getByRole("button", { name: action === "notes" ? "Salvar" : "Registrar que acompanhei", exact: true }));
+    } else fireEvent.click(ui.getByRole("button", { name: action === "notes" ? /^Salvar$/ : "Registrar que acompanhei" }));
     await waitFor(() => expect(m.invalidate).toHaveBeenCalled());
     const updates = m.calls.filter((c) => c.table === "quote_requests" && c.op === "update");
     expect(updates).toHaveLength(1);
@@ -174,9 +175,9 @@ describe("panel store scoping with isolated database mocks", () => {
     m.results["rules"] = [{ id: "rule-1", category: "pisos", trigger: "mock", complement: "mock", explanation: "mock", reviewed: false, active: false }];
     const ui = mount(Rules);
     if (action === "edit") {
-      fireEvent.click(ui.getByRole("button", { name: "Editar", exact: true }));
+      fireEvent.click(ui.getByRole("button", { name: /^Editar$/ }));
       fireEvent.click(ui.getByRole("button", { name: "Salvar alterações" }));
-    } else fireEvent.click(ui.getByRole("button", { name: action === "review" ? "Marcar como revisada" : "Excluir", exact: true }));
+    } else fireEvent.click(ui.getByRole("button", { name: action === "review" ? "Marcar como revisada" : /^Excluir$/ }));
     await waitFor(() => expect(m.calls).toHaveLength(1));
     expect(m.calls[0]?.filters).toEqual([["id", "rule-1"], ["store_id", PILOT]]);
     expect(m.calls[0]?.op).toBe(action === "delete" ? "delete" : "update");
